@@ -236,7 +236,7 @@ const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject
           </UITable>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            {!isAdmin && (
+            
               <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                 <DialogTrigger asChild>
                   <Button variant="hero">Request Buy-in</Button>
@@ -254,7 +254,6 @@ const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-            )}
 
             {isAdmin && (
               <>
