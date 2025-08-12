@@ -14,7 +14,119 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      buy_in_requests: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          created_at: string
+          id: string
+          player_id: string
+          status: Database["public"]["Enums"]["buy_in_request_status"]
+          table_id: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          created_at?: string
+          id?: string
+          player_id: string
+          status?: Database["public"]["Enums"]["buy_in_request_status"]
+          table_id: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          created_at?: string
+          id?: string
+          player_id?: string
+          status?: Database["public"]["Enums"]["buy_in_request_status"]
+          table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buy_in_requests_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "table_players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buy_in_requests_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "poker_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poker_tables: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          id: string
+          join_code: string
+          name: string | null
+          status: Database["public"]["Enums"]["table_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          id?: string
+          join_code: string
+          name?: string | null
+          status?: Database["public"]["Enums"]["table_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          id?: string
+          join_code?: string
+          name?: string | null
+          status?: Database["public"]["Enums"]["table_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      table_players: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          final_amount: number | null
+          id: string
+          name: string
+          table_id: string
+          total_buy_ins: number
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          final_amount?: number | null
+          id?: string
+          name: string
+          table_id: string
+          total_buy_ins?: number
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          final_amount?: number | null
+          id?: string
+          name?: string
+          table_id?: string
+          total_buy_ins?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_players_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "poker_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +135,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      buy_in_request_status: "pending" | "approved" | "rejected"
+      table_status: "active" | "ended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +263,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      buy_in_request_status: ["pending", "approved", "rejected"],
+      table_status: ["active", "ended"],
+    },
   },
 } as const
