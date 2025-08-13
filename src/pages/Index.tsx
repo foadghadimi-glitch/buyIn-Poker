@@ -8,15 +8,27 @@ import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRo
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { storage, uid, sixDigitCode } from '@/utils/storage';
 import type { BuyInRequest, Player, Table as PokerTable } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
   const navigate = useNavigate();
   const profile = storage.getProfile();
   const [table, setTable] = useState<PokerTable | null>(storage.getTable());
-
+  const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => {
     document.title = 'Poker Buy-in Tracker — Home';
     if (!profile) navigate('/onboarding');
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUserId(session?.user?.id ?? null);
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+      if (!session) navigate('/auth');
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -30,7 +42,7 @@ const Index = () => {
 
   if (!profile) return null;
 
-  const createTable = (name?: string) => {
+  const createTable = async (name?: string) => {
     const join = sixDigitCode();
     const admin: Player = {
       id: profile.id,
@@ -48,6 +60,17 @@ const Index = () => {
       status: 'active',
     };
     setTable(newTable);
+
+    if (!userId) return;
+    const { error } = await supabase.from('poker_tables').insert({
+      admin_user_id: userId,
+      name: name ?? null,
+      join_code: join,
+      status: 'active',
+    });
+    if (error) {
+      console.error('Failed to create table in DB', error);
+    }
   };
 
   const joinTable = (code: string) => {

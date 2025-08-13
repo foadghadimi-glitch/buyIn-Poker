@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-
+import { supabase } from '@/integrations/supabase/client';
 const Onboarding = () => {
   const navigate = useNavigate();
   const existing = storage.getProfile();
@@ -18,6 +18,15 @@ const Onboarding = () => {
     document.title = 'Onboarding — Poker Buy-in Tracker';
   }, []);
 
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // no async calls here per best practices
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) navigate('/auth');
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const onPick = () => fileRef.current?.click();
 
   const onFile = async (f: File) => {
@@ -26,14 +35,26 @@ const Onboarding = () => {
     reader.readAsDataURL(f);
   };
 
-  const onSubmit = () => {
+  const onSubmit = async () => {
     if (!name.trim()) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const supaUserId = session?.user?.id;
     const profile: Profile = {
-      id: existing?.id ?? uid('p_'),
+      id: existing?.id ?? (supaUserId || uid('p_')),
       name: name.trim(),
       avatar,
     };
     storage.setProfile(profile);
+
+    if (supaUserId) {
+      const { error } = await (supabase as any).from('profiles').upsert({
+        id: supaUserId,
+        display_name: name.trim(),
+        avatar_url: avatar,
+      });
+      if (error) console.error('Failed to save profile to DB', error);
+    }
+
     navigate('/');
   };
 
