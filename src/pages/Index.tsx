@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { storage, uid, sixDigitCode } from '@/utils/storage';
+import { storage, uid, fourDigitCode } from '@/utils/storage';
 import type { BuyInRequest, Player, Table as PokerTable } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -31,7 +31,7 @@ const Index = () => {
   if (!profile) return null;
 
   const createTable = async (name?: string) => {
-    const join = sixDigitCode();
+    const join = fourDigitCode();
     const admin: Player = {
       id: profile.id,
       name: profile.name,
@@ -49,29 +49,112 @@ const Index = () => {
     };
     setTable(newTable);
 
-    // Save to Supabase without requiring auth
-    const { error } = await supabase.from('poker_tables').insert({
-      admin_user_id: null, // No auth required
+    // Save to Supabase
+    const { data, error } = await supabase.from('poker_tables').insert({
+      admin_user_id: null,
       name: name ?? null,
       join_code: join,
       status: 'active',
-    });
+    }).select().single();
+
     if (error) {
       console.error('Failed to create table in DB', error);
-    }
-  };
-
-  const joinTable = (code: string) => {
-    const existing = storage.getTable();
-    if (!existing || existing.joinCode !== code) {
-      alert('Join code not found locally. Connect Supabase later for real tables.');
       return;
     }
-    // If already joined, do nothing
-    if (!existing.players.find((p) => p.id === profile.id)) {
-      existing.players.push({ id: profile.id, name: profile.name, avatar: profile.avatar, totalBuyIns: 0 });
+
+    // Save admin player to Supabase
+    await supabase.from('table_players').insert({
+      table_id: data.id,
+      name: admin.name,
+      avatar_url: admin.avatar,
+      total_buy_ins: 0,
+    });
+  };
+
+  const joinTable = async (code: string) => {
+    // First check local storage
+    const localTable = storage.getTable();
+    if (localTable?.joinCode === code) {
+      if (!localTable.players.find((p) => p.id === profile.id)) {
+        localTable.players.push({ id: profile.id, name: profile.name, avatar: profile.avatar, totalBuyIns: 0 });
+        setTable({ ...localTable });
+      }
+      return;
     }
-    setTable({ ...existing });
+
+    // Search Supabase for table with join code
+    const { data: tableData, error: tableError } = await supabase
+      .from('poker_tables')
+      .select('*')
+      .eq('join_code', code)
+      .eq('status', 'active')
+      .single();
+
+    if (tableError || !tableData) {
+      alert('Join code not found or table is not active.');
+      return;
+    }
+
+    // Get existing players for this table
+    const { data: playersData, error: playersError } = await supabase
+      .from('table_players')
+      .select('*')
+      .eq('table_id', tableData.id);
+
+    if (playersError) {
+      console.error('Failed to fetch players:', playersError);
+      return;
+    }
+
+    // Convert to our local format
+    const players: Player[] = playersData.map(p => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar_url,
+      totalBuyIns: parseFloat(String(p.total_buy_ins)),
+      finalAmount: p.final_amount ? parseFloat(String(p.final_amount)) : undefined,
+    }));
+
+    // Check if user already joined
+    const alreadyJoined = players.find(p => p.name === profile.name);
+    if (!alreadyJoined) {
+      // Add current user to table
+      const { data: newPlayer, error: playerError } = await supabase
+        .from('table_players')
+        .insert({
+          table_id: tableData.id,
+          name: profile.name,
+          avatar_url: profile.avatar,
+          total_buy_ins: 0,
+        })
+        .select()
+        .single();
+
+      if (playerError) {
+        console.error('Failed to add player:', playerError);
+        return;
+      }
+
+      players.push({
+        id: newPlayer.id,
+        name: newPlayer.name,
+        avatar: newPlayer.avatar_url,
+        totalBuyIns: 0,
+      });
+    }
+
+    // Create local table object
+    const joinedTable: PokerTable = {
+      id: tableData.id,
+      name: tableData.name || undefined,
+      joinCode: tableData.join_code,
+      adminId: tableData.admin_user_id || players[0]?.id || profile.id,
+      players,
+      requests: [],
+      status: tableData.status as any,
+    };
+
+    setTable(joinedTable);
   };
 
   const requestBuyIn = (amount: number) => {
@@ -152,7 +235,7 @@ const Landing = ({ createTable, joinTable }: { createTable: (name?: string) => v
       <Card className="shadow-elegant">
         <CardHeader>
           <CardTitle>Create Table</CardTitle>
-          <CardDescription>Be the admin and share a 6-digit join code</CardDescription>
+          <CardDescription>Be the admin and share a 4-digit join code</CardDescription>
         </CardHeader>
         <CardContent>
           <Dialog open={openCreate} onOpenChange={setOpenCreate}>
@@ -178,7 +261,7 @@ const Landing = ({ createTable, joinTable }: { createTable: (name?: string) => v
       <Card className="shadow-elegant">
         <CardHeader>
           <CardTitle>Join Table</CardTitle>
-          <CardDescription>Enter the 6-digit code from your admin</CardDescription>
+          <CardDescription>Enter the 4-digit code from your admin</CardDescription>
         </CardHeader>
         <CardContent>
           <Dialog open={openJoin} onOpenChange={setOpenJoin}>
@@ -191,7 +274,7 @@ const Landing = ({ createTable, joinTable }: { createTable: (name?: string) => v
               </DialogHeader>
               <div className="space-y-3">
                 <Label htmlFor="jcode">Join code</Label>
-                <Input id="jcode" placeholder="123456" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} />
+                <Input id="jcode" placeholder="1234" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} />
               </div>
               <DialogFooter>
                 <Button onClick={() => { joinTable(joinCode.trim()); setOpenJoin(false); }}>Join</Button>
@@ -214,12 +297,16 @@ const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject
   onEnd: (finals: Record<string, number>) => void;
   onReset: () => void;
 }) => {
+  const navigate = useNavigate();
   const [openBuyIn, setOpenBuyIn] = useState(false);
   const [amount, setAmount] = useState('50');
   const [openEnd, setOpenEnd] = useState(false);
   const [finals, setFinals] = useState<Record<string, string>>({});
 
   const pending = table.requests;
+  
+  // Calculate totals for end game validation
+  const totalBuyIns = table.players.reduce((sum, p) => sum + p.totalBuyIns, 0);
 
   return (
     <div className="space-y-8">
@@ -247,24 +334,27 @@ const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject
           </UITable>
 
           <div className="mt-6 flex flex-wrap gap-3">
-            
-              <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
-                <DialogTrigger asChild>
-                  <Button variant="hero">Request Buy-in</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Request Buy-in</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-2">
-                    <Label htmlFor="amount">Amount</Label>
-                    <Input id="amount" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                  </div>
-                  <DialogFooter>
-                    <Button onClick={() => { onRequest(parseFloat(amount || '0')); setOpenBuyIn(false); }}>Submit</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+            <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
+              <DialogTrigger asChild>
+                <Button variant="hero">Request Buy-in</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request Buy-in</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount (can be negative)</Label>
+                  <Input id="amount" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => { onRequest(parseFloat(amount || '0')); setOpenBuyIn(false); }}>Submit</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Button variant="secondary" onClick={() => navigate('/history')}>
+              History
+            </Button>
 
             {isAdmin && (
               <>
@@ -272,17 +362,47 @@ const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject
                   <DialogTrigger asChild>
                     <Button variant="destructive">End Game</Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                      <DialogTitle>Final Amounts</DialogTitle>
+                      <DialogTitle>End Game - Final Amounts</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                      {table.players.map((p) => (
-                        <div className="grid grid-cols-2 gap-3" key={p.id}>
-                          <Label htmlFor={`final-${p.id}`}>{p.name}</Label>
-                          <Input id={`final-${p.id}`} type="number" inputMode="decimal" value={finals[p.id] ?? ''} onChange={(e) => setFinals({ ...finals, [p.id]: e.target.value })} />
-                        </div>
-                      ))}
+                      <UITable>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Player</TableHead>
+                            <TableHead className="text-right">Total Buy-ins</TableHead>
+                            <TableHead className="text-right">Final Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {table.players.map((p) => (
+                            <TableRow key={p.id}>
+                              <TableCell>{p.name}</TableCell>
+                              <TableCell className="text-right">${p.totalBuyIns.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <Input 
+                                  type="number" 
+                                  inputMode="decimal" 
+                                  value={finals[p.id] ?? ''} 
+                                  onChange={(e) => setFinals({ ...finals, [p.id]: e.target.value })}
+                                  className="text-right"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="border-t-2 font-bold">
+                            <TableCell>TOTALS</TableCell>
+                            <TableCell className="text-right">${totalBuyIns.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">
+                              ${Object.entries(finals).reduce((sum, [_, v]) => sum + parseFloat(v || '0'), 0).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </UITable>
+                      <p className="text-sm text-muted-foreground">
+                        Note: Total buy-ins should equal total final amounts for a balanced game.
+                      </p>
                     </div>
                     <DialogFooter>
                       <Button onClick={() => {
@@ -301,34 +421,57 @@ const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject
         </CardContent>
       </Card>
 
-      {isAdmin && (
+      {isAdmin && pending.length > 0 && (
         <Card className="shadow-elegant">
           <CardHeader>
             <CardTitle>Pending Approvals</CardTitle>
             <CardDescription>Approve or reject buy-in requests</CardDescription>
           </CardHeader>
           <CardContent>
-            {pending.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No pending requests</p>
-            ) : (
-              <div className="space-y-3">
-                {pending.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
-                    <div>
-                      <div className="font-medium">{table.players.find((p) => p.id === r.playerId)?.name}</div>
-                      <div className="text-sm text-muted-foreground">${r.amount.toFixed(2)}</div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => onApprove(r.id)}>Approve</Button>
-                      <Button size="sm" variant="outline" onClick={() => onReject(r.id)}>Reject</Button>
+            <div className="space-y-3">
+              {pending.map((r) => (
+                <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
+                  <div>
+                    <div className="font-medium">{table.players.find((p) => p.id === r.playerId)?.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {r.amount >= 0 ? '+' : ''}${r.amount.toFixed(2)}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => onApprove(r.id)}>Approve</Button>
+                    <Button size="sm" variant="outline" onClick={() => onReject(r.id)}>Reject</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
+
+      <Card className="shadow-elegant">
+        <CardHeader>
+          <CardTitle>All Players</CardTitle>
+          <CardDescription>Current players and their total buy-ins</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UITable>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Player</TableHead>
+                <TableHead className="text-right">Total Buy-ins</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {table.players.map((p) => (
+                <TableRow key={p.id} className={p.id === profileId ? 'bg-accent/10' : ''}>
+                  <TableCell>{p.name}</TableCell>
+                  <TableCell className="text-right">${p.totalBuyIns.toFixed(2)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </UITable>
+        </CardContent>
+      </Card>
     </div>
   );
 };
