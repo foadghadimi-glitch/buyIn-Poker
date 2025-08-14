@@ -17,16 +17,6 @@ const Onboarding = () => {
   useEffect(() => {
     document.title = 'Onboarding — Poker Buy-in Tracker';
   }, []);
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // no async calls here per best practices
-    });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) navigate('/auth');
-    });
-    return () => subscription.unsubscribe();
-  }, []);
   const onPick = () => fileRef.current?.click();
 
   const onFile = async (f: File) => {
@@ -35,26 +25,14 @@ const Onboarding = () => {
     reader.readAsDataURL(f);
   };
 
-  const onSubmit = async () => {
+  const onSubmit = () => {
     if (!name.trim()) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    const supaUserId = session?.user?.id;
     const profile: Profile = {
-      id: existing?.id ?? (supaUserId || uid('p_')),
+      id: existing?.id ?? uid('p_'),
       name: name.trim(),
       avatar,
     };
     storage.setProfile(profile);
-
-    if (supaUserId) {
-      const { error } = await (supabase as any).from('profiles').upsert({
-        id: supaUserId,
-        display_name: name.trim(),
-        avatar_url: avatar,
-      });
-      if (error) console.error('Failed to save profile to DB', error);
-    }
-
     navigate('/');
   };
 

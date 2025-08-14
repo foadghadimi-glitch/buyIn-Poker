@@ -14,21 +14,9 @@ const Index = () => {
   const navigate = useNavigate();
   const profile = storage.getProfile();
   const [table, setTable] = useState<PokerTable | null>(storage.getTable());
-  const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => {
     document.title = 'Poker Buy-in Tracker — Home';
     if (!profile) navigate('/onboarding');
-  }, []);
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUserId(session?.user?.id ?? null);
-    });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserId(session?.user?.id ?? null);
-      if (!session) navigate('/auth');
-    });
-    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -61,9 +49,9 @@ const Index = () => {
     };
     setTable(newTable);
 
-    if (!userId) return;
+    // Save to Supabase without requiring auth
     const { error } = await supabase.from('poker_tables').insert({
-      admin_user_id: userId,
+      admin_user_id: null, // No auth required
       name: name ?? null,
       join_code: join,
       status: 'active',

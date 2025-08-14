@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
@@ -61,7 +61,7 @@ export type Database = {
       }
       poker_tables: {
         Row: {
-          admin_user_id: string
+          admin_user_id: string | null
           created_at: string
           id: string
           join_code: string
@@ -70,7 +70,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          admin_user_id: string
+          admin_user_id?: string | null
           created_at?: string
           id?: string
           join_code: string
@@ -79,7 +79,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          admin_user_id?: string
+          admin_user_id?: string | null
           created_at?: string
           id?: string
           join_code?: string
