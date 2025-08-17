@@ -48,7 +48,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [endUpValues, setEndUpValues] = useState<Record<string, number>>({}); // Store end up values per player
 
   // Move isAdmin definition before useEffect
-  const isAdmin = profile?.id === table?.admin_user_id;
+  const isAdmin = profile?.id === table?.adminId || profile?.id === table?.admin_user_id;
 
   // Do not fetch table if propTable is present
   useEffect(() => {
@@ -494,11 +494,16 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
         </CardHeader>
         <CardContent>
           {/* Buy-in request section */}
-          <div className="mb-6 flex gap-4 items-center">
+          <div className="mb-6 flex gap-2 items-center flex-wrap">
             {/* Buy-in request button (always visible) */}
             <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
               <DialogTrigger asChild>
-                <Button variant="hero">Request Buy-in</Button>
+                <Button
+                  variant="hero"
+                  className="px-3 py-1 min-w-[80px] text-[13px] rounded bg-green-600 hover:bg-green-700 text-white"
+                >
+                  Request Buy-in
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -523,7 +528,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
             {/* History button (always visible, comes after buy-in request) */}
             <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
               <HistoryDialogTrigger asChild>
-                <Button variant="outline">History</Button>
+                <Button
+                  variant="outline"
+                  className="px-3 py-1 min-w-[80px] text-[13px] rounded bg-blue-600 hover:bg-blue-700 text-white border-none"
+                >
+                  History
+                </Button>
               </HistoryDialogTrigger>
               <HistoryDialogContent style={{ minWidth: 350, maxWidth: 600 }}>
                 <HistoryDialogHeader>
@@ -589,7 +599,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
             {isAdmin && (
               <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                 <DialogTrigger asChild>
-                  <Button variant="outline">End Up</Button>
+                  <Button
+                    variant="outline"
+                    className="px-3 py-1 min-w-[80px] text-[13px] rounded bg-purple-600 hover:bg-purple-700 text-white border-none"
+                  >
+                    End Up
+                  </Button>
                 </DialogTrigger>
                 <DialogContent style={{
                   minWidth: 320,
