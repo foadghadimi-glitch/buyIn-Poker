@@ -203,6 +203,54 @@ const Index = () => {
     }
   }, [profile, table]);
 
+  // Restore session from local storage on initial load
+  useEffect(() => {
+    const storedProfile = storage.getProfile();
+    const storedTable = storage.getTable();
+    if (storedProfile) {
+      setProfile(storedProfile);
+      if (storedTable && storedTable.id) {
+        // Fetch latest table data from Supabase
+        supabase
+          .from('poker_tables')
+          .select('*')
+          .eq('id', storedTable.id)
+          .single()
+          .then(({ data, error }) => {
+            if (!error && data) {
+              const playersArray = Array.isArray(data.players) ? data.players : [];
+              const tableObj = {
+                id: data.id,
+                name: data.name,
+                joinCode: data.join_code,
+                adminId: data.admin_user_id,
+                status: data.status,
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                players: playersArray,
+              };
+              storage.setTable(tableObj);
+              setTable(tableObj);
+              // If user is a player, go to PokerTable
+              if (playersArray.some((p: any) => p.id === storedProfile.id)) {
+                setCurrentPage('pokerTable');
+              } else {
+                setCurrentPage('tableSelection');
+              }
+            } else {
+              // Table not found, fallback to table selection
+              setTable(null);
+              setCurrentPage('tableSelection');
+            }
+          });
+      } else {
+        setCurrentPage('tableSelection');
+      }
+    } else {
+      setCurrentPage('onboarding');
+    }
+  }, []);
+
   if (currentPage === 'onboarding') {
     console.log('[Index] Rendering Onboarding');
     return <Onboarding onSetProfile={handleOnboardingComplete} />;
