@@ -251,6 +251,7 @@ const Index = () => {
         <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Debug Log:</div>
         {debugLogs.map((log, i) => <div key={i} style={{ marginBottom: 2 }}>{log}</div>)}
       </div>
+      <img src="/poker-logo.png" alt="Poker Logo" width={64} height={64} />
     </>
   );
 };
