@@ -46,6 +46,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [pendingJoinRequests, setPendingJoinRequests] = useState<any[]>([]);
   const [historyData, setHistoryData] = useState<any[]>([]); // Store buy-in history
   const [endUpValues, setEndUpValues] = useState<Record<string, number>>({}); // Store end up values per player
+  const [processingRequests, setProcessingRequests] = useState<string[]>([]);
 
   // Move isAdmin definition before useEffect
   const isAdmin = profile?.id === table?.adminId || profile?.id === table?.admin_user_id;
@@ -241,32 +242,42 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   };
 
   const handleApprove = async (reqId: string) => {
-    // Approve: move to buy_ins and remove from buy_in_requests
-    const { data: req, error } = await supabase.from('buy_in_requests').select('*').eq('id', reqId).single();
-    if (error || !req) return;
+    if (processingRequests.includes(reqId)) return;
+    setProcessingRequests(prev => [...prev, reqId]);
+    try {
+      const { data: req, error } = await supabase.from('buy_in_requests').select('*').eq('id', reqId).single();
+      if (error || !req) return;
 
-    // Ensure buy-in is added to buy_ins table with all required fields
-    await supabase.from('buy_ins').insert({
-      id: uuidv4(),
-      table_id: req.table_id,
-      player_id: req.player_id,
-      admin_id: profile.id, // admin who approved
-      amount: req.amount,
-      status: 'approved',
-      timestamp: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
+      // Ensure buy-in is added to buy_ins table with all required fields
+      await supabase.from('buy_ins').insert({
+        id: uuidv4(),
+        table_id: req.table_id,
+        player_id: req.player_id,
+        admin_id: profile.id, // admin who approved
+        amount: req.amount,
+        status: 'approved',
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
 
-    // Remove the request from buy_in_requests
-    await supabase.from('buy_in_requests').delete().eq('id', reqId);
-    setPendingRequests(pendingRequests.filter(r => r.id !== reqId));
+      // Remove the request from buy_in_requests
+      await supabase.from('buy_in_requests').delete().eq('id', reqId);
+      setPendingRequests(pendingRequests.filter(r => r.id !== reqId));
+    } finally {
+      setProcessingRequests(prev => prev.filter(id => id !== reqId));
+    }
   };
 
   const handleReject = async (reqId: string) => {
-    // Reject: simply remove the request from buy_in_requests
-    await supabase.from('buy_in_requests').delete().eq('id', reqId);
-    setPendingRequests(pendingRequests.filter(r => r.id !== reqId));
+    if (processingRequests.includes(reqId)) return;
+    setProcessingRequests(prev => [...prev, reqId]);
+    try {
+      await supabase.from('buy_in_requests').delete().eq('id', reqId);
+      setPendingRequests(pendingRequests.filter(r => r.id !== reqId));
+    } finally {
+      setProcessingRequests(prev => prev.filter(id => id !== reqId));
+    }
   };
 
   const handleApproveJoin = async (reqId: string) => {
@@ -500,9 +511,10 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               <DialogTrigger asChild>
                 <Button
                   variant="hero"
-                  className="px-3 py-1 min-w-[80px] text-[13px] rounded bg-green-600 hover:bg-green-700 text-white"
+                  className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 transition-all"
                 >
-                  Request Buy-in
+                  <span role="img" aria-label="buy-in">💸</span>
+                  Buy-in
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -530,8 +542,9 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               <HistoryDialogTrigger asChild>
                 <Button
                   variant="outline"
-                  className="px-3 py-1 min-w-[80px] text-[13px] rounded bg-blue-600 hover:bg-blue-700 text-white border-none"
+                  className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-none flex items-center gap-1 transition-all"
                 >
+                  <span role="img" aria-label="history">📜</span>
                   History
                 </Button>
               </HistoryDialogTrigger>
@@ -601,8 +614,9 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    className="px-3 py-1 min-w-[80px] text-[13px] rounded bg-purple-600 hover:bg-purple-700 text-white border-none"
+                    className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-purple-600 hover:bg-purple-700 text-white border-none flex items-center gap-1 transition-all"
                   >
+                    <span role="img" aria-label="end-up">🏁</span>
                     End Up
                   </Button>
                 </DialogTrigger>
@@ -725,8 +739,21 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => handleApprove(r.id)}>Approve</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleReject(r.id)}>Reject</Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(r.id)}
+                          disabled={processingRequests.includes(r.id)}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReject(r.id)}
+                          disabled={processingRequests.includes(r.id)}
+                        >
+                          Reject
+                        </Button>
                       </div>
                     </div>
                   ))}
