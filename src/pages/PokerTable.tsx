@@ -40,6 +40,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [openBuyIn, setOpenBuyIn] = useState(false);
   const [openHistory, setOpenHistory] = useState(false); // Add state for history dialog
   const [openEndUp, setOpenEndUp] = useState(false); // Add state for end up dialog
+  const [openExit, setOpenExit] = useState(false);
   const [amount, setAmount] = useState('');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [playerTotals, setPlayerTotals] = useState<Record<string, number>>({});
@@ -47,6 +48,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [historyData, setHistoryData] = useState<any[]>([]); // Store buy-in history
   const [endUpValues, setEndUpValues] = useState<Record<string, number>>({}); // Store end up values per player
   const [processingRequests, setProcessingRequests] = useState<string[]>([]);
+  const [processingExit, setProcessingExit] = useState(false);
 
   // Move isAdmin definition before useEffect
   const isAdmin = profile?.id === table?.adminId || profile?.id === table?.admin_user_id;
@@ -201,14 +203,23 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 totals[row.player_id] = (totals[row.player_id] || 0) + Number(row.amount);
               });
               setPlayerTotals(totals);
-              // Update table.players totalPoints for real-time table below
-              setTable((prev: any) => ({
-                ...prev,
-                players: prev.players.map((p: any) => ({
-                  ...p,
-                  totalPoints: totals[p.id] || 0
-                }))
-              }));
+
+              // Always use the latest players array from the DB, do not filter out inactive players
+              const { data: tableData } = await supabase
+                .from('poker_tables')
+                .select('players')
+                .eq('id', table.id)
+                .single();
+
+              if (tableData && tableData.players) {
+                setTable((prev: any) => ({
+                  ...prev,
+                  players: tableData.players.map((p: any) => ({
+                    ...p,
+                    totalPoints: totals[p.id] || 0
+                  }))
+                }));
+              }
             }
           };
           fetchTotals();
@@ -302,14 +313,21 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     if (userError || !userProfile) return;
 
     // Check if player is already in the table (avoid duplicates)
-    const alreadyInTable = table.players.some((p: any) => p.id === userProfile.id);
-    console.log('[PokerTable] alreadyInTable:', alreadyInTable, 'table.players:', table.players);
+    const playerIndex = table.players.findIndex((p: any) => p.id === userProfile.id);
+    if (playerIndex !== -1) {
+      // If player exists and is inactive, reactivate them
+      const updatedPlayers = table.players.map((p: any, idx: number) =>
+        idx === playerIndex ? { ...p, active: true } : p
+      );
+      await supabase
+        .from('poker_tables')
+        .update({ players: updatedPlayers })
+        .eq('id', table.id);
 
-    if (alreadyInTable) {
-      // Remove the join request, but do not add again
+      // Remove the join request
       await supabase.from('join_requests').delete().eq('id', reqId);
       setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
-      console.log('[PokerTable] Player already in table, join request deleted.');
+      setTable({ ...table, players: updatedPlayers });
       return;
     }
 
@@ -474,13 +492,13 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     ? table.players.reduce((sum, p) => sum + (typeof p.points === 'number' ? p.points : 0), 0)
     : 0;
 
+  // Guard: If table is null, navigate away and do not render PokerTable UI
   if (!table) {
-    console.log('[PokerTable] No table found, rendering fallback');
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-page">
-        <div>No Table Found</div>
-      </div>
-    );
+    // Optionally, you can use useEffect to navigate if table becomes null
+    useEffect(() => {
+      navigate('/table-selection'); // <-- Change this route if needed
+    }, []);
+    return null;
   }
 
   // Log values right before rendering
@@ -490,6 +508,46 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     tableName: table?.name,
     players: table?.players,
   });
+
+  // Handler for exiting the game
+  const handleExitGame = async () => {
+    if (!table || !profile) return;
+    setProcessingExit(true);
+
+    // Mark player as inactive instead of removing from players array
+    const updatedPlayers = table.players.map((p: any) =>
+      p.id === profile.id ? { ...p, active: false } : p
+    );
+
+    // If the exiting player is admin, transfer admin role
+    let updateFields: any = { players: updatedPlayers };
+    if (isAdmin && updatedPlayers.filter((p: any) => p.active !== false).length > 0) {
+      // Randomly select a new active admin
+      const activePlayers = updatedPlayers.filter((p: any) => p.active !== false);
+      const newAdmin = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+      updateFields.admin_user_id = newAdmin.id;
+      updateFields.admin_pending_approval = true;
+
+      supabase
+        .channel('user_' + newAdmin.id)
+        .send({
+          type: 'broadcast',
+          event: 'admin_role_assigned',
+          payload: { tableId: table.id }
+        });
+    }
+
+    await supabase
+      .from('poker_tables')
+      .update(updateFields)
+      .eq('id', table.id);
+
+    storage.setTable(null);
+    navigate('/table-selection');
+    setTable(null);
+    setProcessingExit(false);
+    setOpenExit(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-page flex items-center justify-center p-6">
@@ -824,9 +882,15 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {/* Always show all players, regardless of active status */}
               {table.players.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell>{p.name}</TableCell>
+                <TableRow key={p.id} className={p.active === false ? 'opacity-50' : ''}>
+                  <TableCell>
+                    {p.name}
+                    {p.active === false && (
+                      <span style={{ color: 'red', marginLeft: 6, fontSize: 12 }}>(Exited)</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     {parseInt(String(p.totalPoints ?? 0), 10)}
                   </TableCell>
@@ -834,6 +898,50 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               ))}
             </TableBody>
           </UITable>
+
+          {/* Exit Game button (always visible) */}
+          <Dialog open={openExit} onOpenChange={setOpenExit}>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-red-600 hover:bg-red-700 text-white border-none flex items-center gap-1 transition-all"
+                disabled={processingExit}
+              >
+                <span role="img" aria-label="exit">🚪</span>
+                Exit Game
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Exit Game</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Are you sure you want to exit this game? <br />
+                  <strong>
+                    You will be removed from the table, but your buy-ins, buy-in requests, and end-up values for this table will be preserved for history.
+                  </strong> <br />
+                  You can join another table and your points will not be combined across tables.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={() => setOpenExit(false)}
+                  disabled={processingExit}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleExitGame}
+                  disabled={processingExit}
+                >
+                  Yes, Exit Table
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
     </div>
@@ -862,6 +970,21 @@ export default PokerTable;
   The approved points information is maintained in the table:
     buy_ins
   The approved points information is maintained in the table:
+    buy_ins
+  The approved points information is maintained in the table:
+    buy_ins
+    buy_ins
+  The request for a buy-in that is not approved yet is maintained in the table:
+    buy_in_requests
+
+  The approved points information is maintained in the table:
+    buy_ins
+    buy_ins
+  The request for a buy-in that is not approved yet is maintained in the table:
+    buy_in_requests
+
+  The approved points information is maintained in the table:
+    buy_ins
     buy_ins
   The approved points information is maintained in the table:
     buy_ins
