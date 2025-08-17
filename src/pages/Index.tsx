@@ -239,47 +239,60 @@ const Index = () => {
     const storedProfile = storage.getProfile();
     const storedTable = storage.getTable();
     if (storedProfile) {
-      setProfile(storedProfile);
-      if (storedTable && storedTable.id) {
-        // Always fetch latest table data from Supabase
-        supabase
-          .from('poker_tables')
-          .select('*')
-          .eq('id', storedTable.id)
-          .single()
-          .then(({ data, error }) => {
-            if (!error && data) {
-              const playersArray = Array.isArray(data.players) ? data.players : [];
-              const tableObj = {
-                id: data.id,
-                name: data.name,
-                joinCode: data.join_code,
-                adminId: data.admin_user_id, // always use latest admin info from DB
-                status: data.status,
-                createdAt: data.created_at,
-                updatedAt: data.updated_at,
-                players: playersArray,
-              };
-              storage.setTable(tableObj);
-              setTable(tableObj);
+      // Fetch latest profile from Supabase
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', storedProfile.id)
+        .single()
+        .then(({ data: profileData, error: profileError }) => {
+          if (!profileError && profileData) {
+            storage.setProfile(profileData);
+            setProfile(profileData);
 
-              // If user is admin, ensure admin controls are shown
-              if (storedProfile.id === data.admin_user_id) {
-                setCurrentPage('pokerTable');
-              } else if (playersArray.some((p: any) => p.id === storedProfile.id)) {
-                setCurrentPage('pokerTable');
-              } else {
-                setCurrentPage('tableSelection');
-              }
+            if (storedTable && storedTable.id) {
+              // Fetch latest table data from Supabase
+              supabase
+                .from('poker_tables')
+                .select('*')
+                .eq('id', storedTable.id)
+                .single()
+                .then(({ data, error }) => {
+                  if (!error && data) {
+                    const playersArray = Array.isArray(data.players) ? data.players : [];
+                    const tableObj = {
+                      id: data.id,
+                      name: data.name,
+                      joinCode: data.join_code,
+                      adminId: data.admin_user_id,
+                      status: data.status,
+                      createdAt: data.created_at,
+                      updatedAt: data.updated_at,
+                      players: playersArray,
+                    };
+                    storage.setTable(tableObj);
+                    setTable(tableObj);
+
+                    // If user is admin, ensure admin controls are shown
+                    if (profileData.id === data.admin_user_id) {
+                      setCurrentPage('pokerTable');
+                    } else if (playersArray.some((p: any) => p.id === profileData.id)) {
+                      setCurrentPage('pokerTable');
+                    } else {
+                      setCurrentPage('tableSelection');
+                    }
+                  } else {
+                    setTable(null);
+                    setCurrentPage('tableSelection');
+                  }
+                });
             } else {
-              // Table not found, fallback to table selection
-              setTable(null);
               setCurrentPage('tableSelection');
             }
-          });
-      } else {
-        setCurrentPage('tableSelection');
-      }
+          } else {
+            setCurrentPage('onboarding');
+          }
+        });
     } else {
       setCurrentPage('onboarding');
     }
