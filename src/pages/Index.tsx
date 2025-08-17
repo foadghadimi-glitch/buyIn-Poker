@@ -67,6 +67,7 @@ const Index = () => {
   const [table, setTable] = useState<any>(null);
   const [waitingApproval, setWaitingApproval] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [isRefresh, setIsRefresh] = useState(true);
 
   // Helper to add debug logs
   const addLog = (msg: string, obj?: any) => {
@@ -170,11 +171,24 @@ const Index = () => {
     addLog(`[Index] useEffect: currentPage=${currentPage}, waitingApproval=${waitingApproval}, table.players=${JSON.stringify(table?.players)}`);
   }, [currentPage, profile, table]);
 
-  const handleOnboardingComplete = (profileData: any) => {
+  // Onboarding complete: ensure profile exists in Supabase
+  const handleOnboardingComplete = async (profileData: any) => {
     console.log('[Index] Onboarding complete:', profileData);
+    // Check if profile exists in Supabase
+    const { data: existingProfile, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', profileData.id)
+      .single();
+
+    if (!existingProfile && !error) {
+      // Insert profile if not exists
+      await supabase.from('profiles').insert([profileData]);
+    }
     storage.setProfile(profileData);
     setProfile(profileData);
     setCurrentPage('tableSelection');
+    setIsRefresh(false); // <-- Always set to false after onboarding
   };
 
   // Fix: Ensure table is set after join request
@@ -187,9 +201,12 @@ const Index = () => {
       storage.setTable(createdTable);
       setTable({ ...createdTable }); // Ensure a new object reference
       addLog(`[Index] setTable called with: ${JSON.stringify(createdTable)}`);
+      setIsRefresh(true); // <-- FIX: Set to true to trigger refresh logic after table creation
     } else {
       addLog('[Index] setTable called with: null');
-      setTable(null); // Explicitly clear table state if no table is selected
+      setTable(null);
+      storage.setTable(null);
+      setIsRefresh(false);
     }
     addLog(`[Index] After setTable: table=${JSON.stringify(createdTable)}, waitingApproval=${waitingApproval}, currentPage=${currentPage}`);
     if (joinPending) {
@@ -261,6 +278,8 @@ const Index = () => {
     } else {
       setCurrentPage('onboarding');
     }
+    // <-- Only set isRefresh=true here, not in handleTableSelected
+    setIsRefresh(true); // Mark as refresh ONLY on initial load/restore
 
     // Fetch latest profile and table from Supabase in background
     if (storedProfile) {
@@ -273,6 +292,9 @@ const Index = () => {
           if (!profileError && profileData) {
             storage.setProfile(profileData);
             setProfile(profileData);
+          } else {
+            addLog(`[Index] Warning: Profile not found for id ${storedProfile.id}, keeping local profile.`);
+            // Do NOT overwrite local profile if fetch fails
           }
         });
 
@@ -282,34 +304,216 @@ const Index = () => {
           .select('*')
           .eq('id', storedTable.id)
           .single()
-          .then(({ data, error }) => {
+          .then(async ({ data, error }) => {
             if (!error && data) {
               const playersArray = Array.isArray(data.players) ? data.players : [];
-              const tableObj = {
-                id: data.id,
-                name: data.name,
-                joinCode: data.join_code,
-                adminId: data.admin_user_id,
-                status: data.status,
-                createdAt: data.created_at,
-                updatedAt: data.updated_at,
-                players: playersArray,
-              };
-              storage.setTable(tableObj);
-              setTable(tableObj);
-              // Optionally update currentPage if needed (but don't reset to onboarding)
+              // Fetch latest points for all players
+              if (playersArray.length > 0) {
+                const playerIds = playersArray.map((p: any) => p.id);
+                const { data: profilesData, error: profilesError } = await supabase
+                  .from('profiles')
+                  .select('id,points')
+                  .in('id', playerIds);
+
+                let mergedPlayers = playersArray;
+                if (!profilesError && profilesData) {
+                  // Merge points from profiles into players array
+                  mergedPlayers = playersArray.map((p: any) => {
+                    const profile = profilesData.find((prof: any) => prof.id === p.id);
+                    return profile ? { ...p, points: profile.points } : p;
+                  });
+                }
+
+                const tableObj = {
+                  id: data.id,
+                  name: data.name,
+                  joinCode: data.join_code,
+                  adminId: data.admin_user_id,
+                  status: data.status,
+                  createdAt: data.created_at,
+                  updatedAt: data.updated_at,
+                  players: mergedPlayers,
+                };
+                // Log before saving to storage:
+                console.log('[Index] Saving tableObj to storage:', tableObj);
+                storage.setTable(tableObj);
+                setTable(tableObj);
+                // Optionally update currentPage if needed
+              } else {
+                const tableObj = {
+                  id: data.id,
+                  name: data.name,
+                  joinCode: data.join_code,
+                  adminId: data.admin_user_id,
+                  status: data.status,
+                  createdAt: data.created_at,
+                  updatedAt: data.updated_at,
+                  players: [],
+                };
+                // Log before saving to storage:
+                console.log('[Index] Saving tableObj to storage (empty players):', tableObj);
+                storage.setTable(tableObj);
+                setTable(tableObj);
+              }
+            } else {
+              addLog('[Index] Error fetching table on initial load:', error);
             }
           });
       }
     }
   }, []);
 
+  // Ensure latest player points, admin name, and join code are fetched and merged after refresh
+  useEffect(() => {
+    if (
+      isRefresh &&
+      table &&
+      Array.isArray(table.players) &&
+      table.players.length > 0
+    ) {
+      addLog(`[Index] Refresh effect triggered for table:`, table);
+      const playerIds = table.players.map((p: any) => p.id).filter(Boolean);
+      addLog(`[Index] Player IDs for refresh: ${JSON.stringify(playerIds)}`);
+      if (playerIds.length === 0) return;
+
+      // Always fetch latest table info for admin/join code and name from DB
+      supabase
+        .from('poker_tables')
+        .select('id,join_code,admin_user_id,name')
+        .eq('id', table.id)
+        .single()
+        .then(async ({ data: tableData, error: tableError }) => {
+          addLog(`[Index] DB tableData after refresh:`, tableData);
+          // Add this log:
+          console.log('[Index] Raw DB tableData:', tableData);
+
+          if (tableError) {
+            addLog(`[Index] Error fetching table info: ${tableError.message}`);
+          }
+          addLog(`[Index] Table ID used for DB fetch: ${table.id}`);
+
+          // Defensive: If tableData is missing, do not update table state
+          if (!tableData) {
+            addLog('[Index] No tableData returned from DB, skipping table update.');
+            setIsRefresh(false);
+            return;
+          }
+
+          // Fetch admin profile from DB for latest name
+          let adminName = '';
+          let adminId = tableData.admin_user_id;
+          addLog(`[Index] Admin ID from DB: ${adminId}`);
+          if (adminId) {
+            const { data: adminProfile, error: adminProfileError } = await supabase
+              .from('profiles')
+              .select('id,name')
+              .eq('id', adminId)
+              .single();
+            if (adminProfileError) {
+              addLog(`[Index] Error fetching admin profile: ${adminProfileError.message}`);
+            }
+            adminName = adminProfile?.name || '';
+            addLog(`[Index] DB adminProfile after refresh:`, adminProfile);
+          }
+
+          supabase
+            .from('profiles')
+            .select('id,name')
+            .in('id', playerIds)
+            .then(async ({ data: profilesData, error: profilesError }) => {
+              addLog(`[Index] DB profilesData after refresh:`, profilesData);
+              if (profilesError) {
+                addLog(`[Index] Error fetching player profiles: ${profilesError.message}`);
+              }
+
+              const { data: buyInsData, error: buyInsError } = await supabase
+                .from('buy_ins')
+                .select('player_id,amount')
+                .eq('table_id', table.id);
+
+              addLog(`[Index] DB buyInsData after refresh:`, buyInsData);
+              if (buyInsError) {
+                addLog(`[Index] Error fetching buy-ins: ${buyInsError.message}`);
+              }
+
+              const buyInTotals: Record<string, number> = {};
+              (buyInsData || []).forEach((row: any) => {
+                buyInTotals[row.player_id] = (buyInTotals[row.player_id] || 0) + Number(row.amount);
+              });
+
+              const mergedPlayers = table.players.map((p: any) => {
+                const profile = profilesData?.find((prof: any) => prof.id === p.id);
+                const name = profile ? profile.name : p.name;
+                const points = buyInTotals[p.id] || 0;
+                return { ...p, points, totalPoints: points, name };
+              });
+
+              // Prefer DB adminName, fallback to mergedPlayers lookup, then previous value
+              if (!adminName) {
+                const adminPlayer = mergedPlayers.find((p: any) => p.id === adminId);
+                addLog(`[Index] Fallback adminPlayer from mergedPlayers:`, adminPlayer);
+                adminName = adminPlayer ? adminPlayer.name : (table.adminName || 'Unknown');
+              }
+
+              const joinCode = tableData.join_code || table.joinCode || table.join_code || 'Unknown';
+              addLog(`[Index] Final joinCode for table: ${joinCode}`);
+              addLog(`[Index] Final table name from DB: ${tableData.name}`);
+
+              addLog(`[Index] PokerTable top section after refresh: joinCode=${joinCode} | adminId=${adminId} | adminName=${adminName} | tableName=${tableData.name}`);
+
+              // Always use DB values for adminId/joinCode/table name
+              // Before constructing updatedTable:
+              console.log('[Index] Constructing updatedTable with:', {
+                id: tableData.id,
+                name: tableData.name,
+                joinCode: tableData.join_code,
+                adminId: tableData.admin_user_id,
+                status: tableData.status,
+                createdAt: tableData.created_at,
+                updatedAt: tableData.updated_at,
+                players: mergedPlayers,
+                adminName,
+              });
+
+              const updatedTable = {
+                ...table,
+                players: mergedPlayers,
+                adminId: tableData.admin_user_id,
+                adminName,
+                joinCode,
+                name: tableData.name,
+                createdAt: tableData.created_at,
+                updatedAt: tableData.updated_at,
+                status: tableData.status,
+              };
+              // Log before saving to storage:
+              console.log('[Index] Saving updatedTable to storage:', updatedTable);
+              storage.setTable(updatedTable);
+              setTable(updatedTable);
+              setIsRefresh(false);
+            });
+        });
+    }
+  }, [table, isRefresh]);
+
+  // Add logging for storage contents before rendering PokerTable
+  useEffect(() => {
+    console.log('[Index] Storage.getProfile:', storage.getProfile());
+    console.log('[Index] Storage.getTable:', storage.getTable());
+  }, [currentPage, profile, table]);
+
+  // Add logging after table/profile are set from DB/localStorage
+  useEffect(() => {
+    console.log('[Index] State after DB/localStorage fetch:');
+    console.log('  profile:', profile);
+    console.log('  table:', table);
+  }, [profile, table]);
+
   if (currentPage === 'onboarding') {
     console.log('[Index] Rendering Onboarding');
     return <Onboarding onSetProfile={handleOnboardingComplete} />;
   }
 
-  // Add debug log to TableSelection render to show table state and waitingApproval
   if (currentPage === 'tableSelection') {
     console.log('[Index] Rendering TableSelection');
     return (
@@ -322,14 +526,66 @@ const Index = () => {
   }
 
   if (currentPage === 'pokerTable') {
-    console.log('[Index] Rendering PokerTable with table:', table);
+    // Log raw table and profile props before rendering PokerTable
+    console.log('[Index] Rendering PokerTable with props:');
+    console.log('  table:', table);
+    console.log('  profile:', profile);
+
+    // Log storage contents again for comparison
+    console.log('[Index] Storage.getTable (before PokerTable render):', storage.getTable());
+    console.log('[Index] Storage.getProfile (before PokerTable render):', storage.getProfile());
+
+    // Log joinCode, adminName, tableName, and their presence
+    if (table) {
+      console.log('[Index] PokerTable top section joinCode:', table.joinCode, '| adminId:', table.adminId, '| adminName:', table.adminName, '| tableName:', table.name);
+      console.log('[Index] PokerTable joinCode present?', !!table.joinCode);
+      console.log('[Index] PokerTable adminName present?', !!table.adminName);
+      console.log('[Index] PokerTable tableName present?', !!table.name);
+      // Log all table keys for debugging
+      Object.keys(table).forEach(key => {
+        console.log(`[Index] Table key: ${key} | value:`, table[key]);
+      });
+      // Log all players for debugging
+      if (Array.isArray(table.players)) {
+        table.players.forEach((p: any, idx: number) => {
+          console.log(`[Index] Player[${idx}]: id=${p.id} name=${p.name} points=${p.points} totalPoints=${p.totalPoints}`);
+        });
+      }
+    }
+
     if (!table) {
       const storedTable = storage.getTable();
       console.log('[Index] No table in state, checking storage:', storedTable);
       if (storedTable) setTable(storedTable);
       else return <div className="min-h-screen flex items-center justify-center">No Table Found</div>;
     }
-    return <PokerTable table={table} />;
+
+    // Add logging for the total values shown in the below table
+    if (table && Array.isArray(table.players)) {
+      const playerTotalsLog = table.players.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        points: p.points,
+        totalPoints: p.totalPoints
+      }));
+      const sumPoints = table.players.reduce((sum: number, p: any) => sum + (typeof p.points === 'number' ? p.points : 0), 0);
+      const sumTotalPoints = table.players.reduce((sum: number, p: any) => sum + (typeof p.totalPoints === 'number' ? p.totalPoints : 0), 0);
+      console.log('[Index] PokerTable bottom table playerTotals:', playerTotalsLog);
+      console.log('[Index] PokerTable bottom table sumPoints:', sumPoints, '| sumTotalPoints:', sumTotalPoints);
+    }
+
+    // Only show loading indicator if isRefresh is true
+    if (
+      isRefresh &&
+      table &&
+      Array.isArray(table.players) &&
+      table.players.length > 0 &&
+      table.players.some((p: any) => typeof p.points !== 'number')
+    ) {
+      console.log('[Index] SHOWING: Loading player points... | isRefresh:', isRefresh, '| table.players:', table.players);
+      return <div className="min-h-screen flex items-center justify-center">Loading player points...</div>;
+    }
+    return <PokerTable table={table} isRefresh={isRefresh} />;
   }
 
   return (
@@ -357,71 +613,4 @@ const Index = () => {
   );
 };
 
-// Clarification:
-// The variable `table` in your code refers to a row/object from the Supabase table named "poker_tables" in your database.
-// It is not a table named "table" in your database.
-// The database table is "poker_tables", and each "table" variable in your code is a single game/table instance (row) from "poker_tables".
-
-export default function WrappedIndex() {
-  return (
-    <ErrorBoundary>
-      <Index />
-    </ErrorBoundary>
-  );
-}
-
-// Analysis of your logs and behavior:
-
-// - When you first send a join request as a user, the page does not update after admin approval.
-// - After clearing cache/storage and creating a new user, the join request and approval work as expected.
-
-// **What this means:**
-// - The issue is likely caused by stale or incorrect data in localStorage/sessionStorage (used by your storage utility).
-// - If the user's profile or table info in storage is out of sync with the database, the real-time logic may not run or may use the wrong table/profile.
-// - When you clear the cache/storage and start fresh, the state is correct and everything works.
-
-// **How to fix/prevent:**
-// - Always update local storage (profile and table) immediately after onboarding and after join request/approval.
-// - Make sure your storage utility does not return stale/null data.
-// - Consider adding a check to reload profile/table from the database if storage returns null or outdated data.
-// - Add logging to your storage utility to debug what is being set and retrieved.
-
-// **Summary:**
-// - The root cause is stale or missing data in local storage.
-// - Clearing cache/storage resets the state and fixes the issue.
-// - Ensure your storage logic is robust and always in sync with the latest user and table data.
-
-// Analysis:
-
-// - The admin page logs show that after approval, the table's players array is updated correctly (shows 2 players).
-// - The joining player's page does NOT update to PokerTable immediately after approval; it stays on TableSelection.
-// - The debug logs show that the joining player's ID is NOT present in the table's players array when their client fetches the table after approval, but the admin's client sees the correct array.
-
-// **Possible causes:**
-// 1. **Race condition or delay:** The joining player's client may be fetching the table before the database update is fully committed or before the real-time event is triggered.
-// 2. **Local state not refreshed:** The joining player's client may not be refreshing its table state after the real-time event, or the table state is stale.
-// 3. **Multiple fetches:** The logs show multiple renders and fetches; ensure only one fetchTable runs per real-time event.
-
-// **What to check/fix:**
-// - Make sure the joining player's client waits for the real-time event and only transitions to PokerTable when their ID is present in the table's players array.
-// - Add a log in the real-time event handler to show the fetched table's players array and the current user's ID.
-// - If the table is not updated, add a short delay (setTimeout) before calling fetchTable to allow the database update to propagate.
-// - Ensure the table state is always updated with the latest data from Supabase, not from local storage.
-
-// **Summary:**
-// - The admin logic is correct and the database is updated.
-// - The joining player's client may be fetching stale data or fetching too soon.
-// - Add logging and possibly a short delay in the real-time event handler for the joining player's client to ensure the table update is detected.
-
-// To update the database accordingly (so the joining player's ID is added to the table's players array):
-// This must be done in the admin approval logic, typically in PokerTable.tsx, handleApproveJoin:
-
-// Example (already in your PokerTable.tsx):
-// When the admin approves a join request:
-//await supabase
-//  .from('poker_tables')
-//  .update({ players: updatedPlayers }) // updatedPlayers includes the new joining player
-//  .eq('id', table.id);
-
-// This ensures the database row for the table is updated with the new players array.
-// The real-time subscription in Index.tsx will then detect the change and update the joining user's page.
+export default Index;

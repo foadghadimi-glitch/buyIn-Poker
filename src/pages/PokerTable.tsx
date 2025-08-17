@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { storage } from '@/utils/storage';
@@ -31,7 +31,9 @@ type PokerTableRow = {
 };
 
 const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
+  // Log props at top
   console.log('[PokerTable] Rendered with propTable:', propTable);
+
   const navigate = useNavigate();
   const profile = storage.getProfile();
   const [table, setTable] = useState<any>(propTable || storage.getTable());
@@ -194,7 +196,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               .eq('table_id', table.id) as any;
             if (!error && data) {
               const totals: Record<string, number> = {};
-              (data as Array<{ player_id: string; amount: number }>).forEach((row) => {
+              (data as Array<{ player_id: string, amount: number }>).forEach((row) => {
                 totals[row.player_id] = (totals[row.player_id] || 0) + Number(row.amount);
               });
               setPlayerTotals(totals);
@@ -456,6 +458,11 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       .upsert({ table_id: table.id, player_id: playerId, endup: value });
   };
 
+  // For displaying total points, always use table.players from props
+  const totalPoints = Array.isArray(table.players)
+    ? table.players.reduce((sum, p) => sum + (typeof p.points === 'number' ? p.points : 0), 0)
+    : 0;
+
   if (!table) {
     console.log('[PokerTable] No table found, rendering fallback');
     return (
@@ -465,18 +472,24 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     );
   }
 
-  console.log('[PokerTable] Rendering table info:', table);
+  // Log values right before rendering
+  console.log('[PokerTable] Rendering table info:', {
+    joinCode: table?.joinCode,
+    adminName: table?.adminName,
+    tableName: table?.name,
+    players: table?.players,
+  });
 
   return (
     <div className="min-h-screen bg-gradient-page flex items-center justify-center p-6">
       <Card className="w-full max-w-2xl shadow-elegant">
         <CardHeader>
           <CardTitle>
-            Poker Table: {table.name || table.join_code}
+            Poker Table: {table.name || table.joinCode}
           </CardTitle>
           <CardDescription>
-            Join Code: {table.join_code} <br />
-            Admin: {table.players.find((p: any) => p.id === table.admin_user_id)?.name || 'Unknown'}
+            Join Code: {table.joinCode} <br />
+            Admin: {table.adminName || 'Unknown'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -808,6 +821,12 @@ export default PokerTable;
     buy_ins
   The approved points information is maintained in the table:
     buy_ins
+  The approved points information is maintained in the table:
+    buy_ins
+    buy_ins
+  The request for a buy-in that is not approved yet is maintained in the table:
+    buy_in_requests
+
   The approved points information is maintained in the table:
     buy_ins
     buy_ins
