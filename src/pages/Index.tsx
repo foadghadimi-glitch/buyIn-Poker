@@ -28,6 +28,37 @@ function DebugPanel({ logs }: { logs: string[] }) {
   );
 }
 
+function ErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const handler = (event: ErrorEvent) => {
+      setError(event.error || new Error(event.message));
+    };
+    window.addEventListener('error', handler);
+    return () => window.removeEventListener('error', handler);
+  }, []);
+
+  if (error) {
+    return (
+      <div style={{
+        background: 'red',
+        color: 'white',
+        padding: 16,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        zIndex: 100000,
+      }}>
+        <strong>App Error:</strong> {error.message}
+        <pre>{error.stack}</pre>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 const Index = () => {
   const [profile, setProfile] = useState(storage.getProfile());
   const [currentPage, setCurrentPage] = useState<'onboarding' | 'tableSelection' | 'pokerTable'>(
@@ -210,7 +241,7 @@ const Index = () => {
     if (storedProfile) {
       setProfile(storedProfile);
       if (storedTable && storedTable.id) {
-        // Fetch latest table data from Supabase
+        // Always fetch latest table data from Supabase
         supabase
           .from('poker_tables')
           .select('*')
@@ -223,7 +254,7 @@ const Index = () => {
                 id: data.id,
                 name: data.name,
                 joinCode: data.join_code,
-                adminId: data.admin_user_id,
+                adminId: data.admin_user_id, // always use latest admin info from DB
                 status: data.status,
                 createdAt: data.created_at,
                 updatedAt: data.updated_at,
@@ -231,8 +262,11 @@ const Index = () => {
               };
               storage.setTable(tableObj);
               setTable(tableObj);
-              // If user is a player, go to PokerTable
-              if (playersArray.some((p: any) => p.id === storedProfile.id)) {
+
+              // If user is admin, ensure admin controls are shown
+              if (storedProfile.id === data.admin_user_id) {
+                setCurrentPage('pokerTable');
+              } else if (playersArray.some((p: any) => p.id === storedProfile.id)) {
                 setCurrentPage('pokerTable');
               } else {
                 setCurrentPage('tableSelection');
@@ -309,7 +343,13 @@ const Index = () => {
 // It is not a table named "table" in your database.
 // The database table is "poker_tables", and each "table" variable in your code is a single game/table instance (row) from "poker_tables".
 
-export default Index;
+export default function WrappedIndex() {
+  return (
+    <ErrorBoundary>
+      <Index />
+    </ErrorBoundary>
+  );
+}
 
 // Analysis of your logs and behavior:
 
