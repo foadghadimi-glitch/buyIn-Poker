@@ -1,519 +1,319 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { storage, uid, fourDigitCode } from '@/utils/storage';
-import type { BuyInRequest, Player, Table as PokerTable } from '@/types';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from 'react';
+import Onboarding from './Onboarding';
+import TableSelection from './TableSelection';
+import PokerTable from './PokerTable';
+import { storage } from '@/utils/storage';
+import { supabase } from '@/integrations/supabase/client'; // Ensure this import is present
+
+// Add a visible debug log to the page for troubleshooting
+function DebugPanel({ logs }: { logs: string[] }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      maxHeight: '30vh',
+      overflowY: 'auto',
+      background: 'rgba(0,0,0,0.85)',
+      color: 'lime',
+      fontSize: '14px',
+      zIndex: 99999,
+      padding: '12px',
+      pointerEvents: 'auto'
+    }}>
+      <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Debug Log:</div>
+      {logs.map((log, i) => <div key={i} style={{ marginBottom: 2 }}>{log}</div>)}
+    </div>
+  );
+}
 
 const Index = () => {
-  const navigate = useNavigate();
-  const profile = storage.getProfile();
-  const [table, setTable] = useState<PokerTable | null>(storage.getTable());
-  useEffect(() => {
-    document.title = 'Poker Buy-in Tracker — Home';
-    if (!profile) navigate('/onboarding');
-  }, []);
+  const [profile, setProfile] = useState(storage.getProfile());
+  const [currentPage, setCurrentPage] = useState<'onboarding' | 'tableSelection' | 'pokerTable'>(
+    profile ? 'tableSelection' : 'onboarding'
+  );
+  const [table, setTable] = useState<any>(null);
+  const [waitingApproval, setWaitingApproval] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (table) storage.setTable(table);
-  }, [table]);
-
-  const isAdmin = useMemo(() => {
-    if (!profile || !table) return false;
-    return table.adminId === profile.id;
-  }, [profile, table]);
-
-  if (!profile) return null;
-
-  const createTable = async (name?: string) => {
-    const join = fourDigitCode();
-    const admin: Player = {
-      id: profile.id,
-      name: profile.name,
-      avatar: profile.avatar,
-      totalBuyIns: 0,
-    };
-    const newTable: PokerTable = {
-      id: uid('t_'),
-      name,
-      joinCode: join,
-      adminId: profile.id,
-      players: [admin],
-      requests: [],
-      status: 'active',
-    };
-    setTable(newTable);
-
-    // Save to Supabase
-    const { data, error } = await supabase.from('poker_tables').insert({
-      admin_user_id: null,
-      name: name ?? null,
-      join_code: join,
-      status: 'active',
-    }).select().single();
-
-    if (error) {
-      console.error('Failed to create table in DB', error);
-      return;
-    }
-
-    // Save admin player to Supabase
-    await supabase.from('table_players').insert({
-      table_id: data.id,
-      name: admin.name,
-      avatar_url: admin.avatar,
-      total_buy_ins: 0,
-    });
+  // Helper to add debug logs
+  const addLog = (msg: string, obj?: any) => {
+    setDebugLogs(logs => [...logs.slice(-40), msg + (obj ? ' ' + JSON.stringify(obj) : '')]);
   };
 
-  const joinTable = async (code: string) => {
-    // First check local storage
-    const localTable = storage.getTable();
-    if (localTable?.joinCode === code) {
-      if (!localTable.players.find((p) => p.id === profile.id)) {
-        localTable.players.push({ id: profile.id, name: profile.name, avatar: profile.avatar, totalBuyIns: 0 });
-        setTable({ ...localTable });
-      }
-      return;
-    }
+  // Real-time subscription for poker_tables updates (for join approval)
+  useEffect(() => {
+    if (!table || !table.id || !waitingApproval) return;
 
-    // Search Supabase for table with join code
-    const { data: tableData, error: tableError } = await supabase
-      .from('poker_tables')
-      .select('*')
-      .eq('join_code', code)
-      .eq('status', 'active')
-      .single();
-
-    if (tableError || !tableData) {
-      alert('Join code not found or table is not active.');
-      return;
-    }
-
-    // Get existing players for this table
-    const { data: playersData, error: playersError } = await supabase
-      .from('table_players')
-      .select('*')
-      .eq('table_id', tableData.id);
-
-    if (playersError) {
-      console.error('Failed to fetch players:', playersError);
-      return;
-    }
-
-    // Convert to our local format
-    const players: Player[] = playersData.map(p => ({
-      id: p.id,
-      name: p.name,
-      avatar: p.avatar_url,
-      totalBuyIns: parseFloat(String(p.total_buy_ins)),
-      finalAmount: p.final_amount ? parseFloat(String(p.final_amount)) : undefined,
-    }));
-
-    // Check if user already joined
-    const alreadyJoined = players.find(p => p.name === profile.name);
-    if (!alreadyJoined) {
-      // Add current user to table
-      const { data: newPlayer, error: playerError } = await supabase
-        .from('table_players')
-        .insert({
-          table_id: tableData.id,
-          name: profile.name,
-          avatar_url: profile.avatar,
-          total_buy_ins: 0,
-        })
-        .select()
+    // Add debug log to show fetched table players and current user id
+    const fetchTable = async () => {
+      addLog('[Index] fetchTable called');
+      const { data, error } = await supabase
+        .from('poker_tables')
+        .select('*')
+        .eq('id', table.id)
         .single();
 
-      if (playerError) {
-        console.error('Failed to add player:', playerError);
-        return;
+      addLog('[Index] Real-time fetchTable triggered. Data:', data);
+
+      if (!error && data) {
+        const profile = storage.getProfile();
+        addLog('[Index] Checking if user is in players array', { profileId: profile?.id, players: data.players });
+        const isPlayer = data.players?.some((p: any) => p.id === profile?.id);
+
+        if (isPlayer) {
+          addLog('[Index] User is now in players array. Should move to PokerTable?', { currentPage, waitingApproval });
+          if (currentPage === 'tableSelection' && waitingApproval) {
+            addLog('[Index] Moving to PokerTable page for player: ' + profile?.id);
+            const playersArray = Array.isArray(data.players) ? data.players : [];
+            const tableObj = {
+              id: data.id,
+              name: data.name,
+              joinCode: data.join_code,
+              adminId: data.admin_user_id,
+              status: data.status,
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+              players: playersArray,
+            };
+            storage.setTable(tableObj);
+            setTable(tableObj);
+            setWaitingApproval(false);
+            setCurrentPage('pokerTable');
+          }
+        } else {
+          addLog('[Index] User is NOT in players array. Checking join_requests...', { profileId: profile?.id, players: data.players });
+          const { data: joinReqs, error: joinError } = await (supabase as any)
+            .from('join_requests')
+            .select('*')
+            .eq('table_id', table.id)
+            .eq('player_id', profile?.id)
+            .eq('status', 'pending');
+          addLog('[Index] join_requests for user:', joinReqs);
+          if (!joinError && joinReqs && joinReqs.length === 0) {
+            alert('Your join request was rejected by the admin.');
+            setWaitingApproval(false);
+            setTable(null);
+            setCurrentPage('tableSelection');
+          }
+        }
+      } else {
+        addLog('[Index] Error fetching table:', error);
       }
+    };
 
-      players.push({
-        id: newPlayer.id,
-        name: newPlayer.name,
-        avatar: newPlayer.avatar_url,
-        totalBuyIns: 0,
-      });
+    // --- THIS IS THE REAL-TIME SUBSCRIPTION ---
+    // Add a short delay before calling fetchTable to avoid race condition
+    const channel = supabase
+      .channel('poker_table_player_' + table.id)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'poker_tables',
+          filter: `id=eq.${table.id}`
+        },
+        payload => {
+          addLog('[Index] Real-time event received:', payload);
+          setTimeout(() => {
+            addLog('[Index] Delayed fetchTable after real-time event');
+            fetchTable();
+          }, 300); // 300ms delay to allow DB update to propagate
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [table, waitingApproval, currentPage]);
+
+  useEffect(() => {
+    document.title = 'Poker Buy-in Tracker';
+    console.log('[Index] Current page:', currentPage);
+    console.log('[Index] Profile:', profile);
+    console.log('[Index] Table:', table);
+    // Add debug log for currentPage and waitingApproval
+    addLog(`[Index] useEffect: currentPage=${currentPage}, waitingApproval=${waitingApproval}, table.players=${JSON.stringify(table?.players)}`);
+  }, [currentPage, profile, table]);
+
+  const handleOnboardingComplete = (profileData: any) => {
+    console.log('[Index] Onboarding complete:', profileData);
+    storage.setProfile(profileData);
+    setProfile(profileData);
+    setCurrentPage('tableSelection');
+  };
+
+  // Fix: Ensure table is set after join request
+  // Add debug log to show which table is being set
+  // Add debug log to show when handleTableSelected is called for join requests
+  const handleTableSelected = (createdTable?: any, joinPending?: boolean) => {
+    console.log('[Index] Table created/selected:', createdTable);
+    addLog(`[Index] handleTableSelected called. joinPending=${joinPending}, createdTable=${JSON.stringify(createdTable)}`);
+    if (createdTable) {
+      storage.setTable(createdTable);
+      setTable({ ...createdTable }); // Ensure a new object reference
+      addLog(`[Index] setTable called with: ${JSON.stringify(createdTable)}`);
+    } else {
+      addLog('[Index] setTable called with: null');
+      setTable(null); // Explicitly clear table state if no table is selected
     }
-
-    // Create local table object
-    const joinedTable: PokerTable = {
-      id: tableData.id,
-      name: tableData.name || undefined,
-      joinCode: tableData.join_code,
-      adminId: tableData.admin_user_id || players[0]?.id || profile.id,
-      players,
-      requests: [],
-      status: tableData.status as any,
-    };
-
-    setTable(joinedTable);
+    addLog(`[Index] After setTable: table=${JSON.stringify(createdTable)}, waitingApproval=${waitingApproval}, currentPage=${currentPage}`);
+    if (joinPending) {
+      addLog('[Index] Setting waitingApproval=true and currentPage=tableSelection for join request');
+      setWaitingApproval(true);
+      setCurrentPage('tableSelection');
+    } else {
+      setWaitingApproval(false);
+      setCurrentPage('pokerTable');
+    }
   };
 
-  const requestBuyIn = (amount: number) => {
-    if (!table || !profile) return;
-    const req: BuyInRequest = {
-      id: uid('r_'),
-      playerId: profile.id,
-      amount,
-      status: 'pending',
-    };
-    setTable({ ...table, requests: [req, ...table.requests] });
-  };
+  // Fix: Ensure onboarding is shown if profile is missing
+  useEffect(() => {
+    if (!profile) {
+      setCurrentPage('onboarding');
+    }
+  }, [profile]);
 
-  const approve = (id: string) => {
-    if (!table) return;
-    const r = table.requests.find((x) => x.id === id);
-    if (!r) return;
-    const players = table.players.map((p) =>
-      p.id === r.playerId ? { ...p, totalBuyIns: p.totalBuyIns + r.amount } : p
+  // Fix: If profile exists and table.players includes the user, move to PokerTable
+  useEffect(() => {
+    if (
+      profile &&
+      table &&
+      Array.isArray(table.players) &&
+      table.players.some((p: any) => p.id === profile.id)
+    ) {
+      setCurrentPage('pokerTable');
+    }
+  }, [profile, table]);
+
+  // Fix: Only auto-transition to PokerTable if the current user is NOT the admin
+  useEffect(() => {
+    if (
+      profile &&
+      table &&
+      Array.isArray(table.players) &&
+      table.players.some((p: any) => p.id === profile.id) &&
+      table.adminId !== profile.id // Only transition for non-admin users
+    ) {
+      setCurrentPage('pokerTable');
+    }
+  }, [profile, table]);
+
+  if (currentPage === 'onboarding') {
+    console.log('[Index] Rendering Onboarding');
+    return <Onboarding onSetProfile={handleOnboardingComplete} />;
+  }
+
+  // Add debug log to TableSelection render to show table state and waitingApproval
+  if (currentPage === 'tableSelection') {
+    console.log('[Index] Rendering TableSelection');
+    return (
+      <TableSelection
+        onCreateTable={(table) => handleTableSelected(table, false)}
+        onJoinTable={(table) => handleTableSelected(table, true)}
+        waitingApproval={waitingApproval}
+      />
     );
-    const requests = table.requests.filter((x) => x.id !== id);
-    setTable({ ...table, players, requests });
-  };
+  }
 
-  const reject = (id: string) => {
-    if (!table) return;
-    setTable({ ...table, requests: table.requests.filter((x) => x.id !== id) });
-  };
-
-  const endGame = (finals: Record<string, number>) => {
-    if (!table) return;
-    const players = table.players.map((p) => ({ ...p, finalAmount: finals[p.id] ?? p.finalAmount ?? 0 }));
-    setTable({ ...table, players, status: 'ended' });
-  };
-
-  const reset = () => {
-    storage.clearTable();
-    setTable(null);
-  };
+  if (currentPage === 'pokerTable') {
+    console.log('[Index] Rendering PokerTable with table:', table);
+    if (!table) {
+      const storedTable = storage.getTable();
+      console.log('[Index] No table in state, checking storage:', storedTable);
+      if (storedTable) setTable(storedTable);
+      else return <div className="min-h-screen flex items-center justify-center">No Table Found</div>;
+    }
+    return <PokerTable table={table} />;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-page">
-      <div className="container py-10 space-y-8">
-        <header className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Poker Table Buy-in Tracker</h1>
-          <Button variant="outline" onClick={() => navigate('/onboarding')}>Edit Profile</Button>
-        </header>
-
-        {!table ? (
-          <Landing createTable={createTable} joinTable={joinTable} />
-        ) : table.status === 'active' ? (
-          <ActiveTable
-            table={table}
-            profileId={profile.id}
-            isAdmin={isAdmin}
-            onRequest={requestBuyIn}
-            onApprove={approve}
-            onReject={reject}
-            onEnd={endGame}
-            onReset={reset}
-          />
-        ) : (
-          <Results table={table} onReset={reset} />
-        )}
+    <>
+      {/* ...existing code for page rendering... */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        width: '100%',
+        maxHeight: '30vh',
+        overflowY: 'auto',
+        background: 'rgba(0,0,0,0.85)',
+        color: 'lime',
+        fontSize: '14px',
+        zIndex: 99999,
+        padding: '12px',
+        pointerEvents: 'auto'
+      }}>
+        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Debug Log:</div>
+        {debugLogs.map((log, i) => <div key={i} style={{ marginBottom: 2 }}>{log}</div>)}
       </div>
-    </div>
+    </>
   );
 };
 
-const Landing = ({ createTable, joinTable }: { createTable: (name?: string) => void; joinTable: (code: string) => void }) => {
-  const [openCreate, setOpenCreate] = useState(false);
-  const [openJoin, setOpenJoin] = useState(false);
-  const [tableName, setTableName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
-
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <Card className="shadow-elegant">
-        <CardHeader>
-          <CardTitle>Create Table</CardTitle>
-          <CardDescription>Be the admin and share a 4-digit join code</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-            <DialogTrigger asChild>
-              <Button variant="hero">Create Table</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>New Table</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Label htmlFor="tname">Table name (optional)</Label>
-                <Input id="tname" placeholder="Friday Night" value={tableName} onChange={(e) => setTableName(e.target.value)} />
-              </div>
-              <DialogFooter>
-                <Button onClick={() => { createTable(tableName || undefined); setOpenCreate(false); }}>Create</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-elegant">
-        <CardHeader>
-          <CardTitle>Join Table</CardTitle>
-          <CardDescription>Enter the 4-digit code from your admin</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Dialog open={openJoin} onOpenChange={setOpenJoin}>
-            <DialogTrigger asChild>
-              <Button variant="secondary">Join Table</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Join with Code</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Label htmlFor="jcode">Join code</Label>
-                <Input id="jcode" placeholder="1234" value={joinCode} onChange={(e) => setJoinCode(e.target.value)} />
-              </div>
-              <DialogFooter>
-                <Button onClick={() => { joinTable(joinCode.trim()); setOpenJoin(false); }}>Join</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
-const ActiveTable = ({ table, profileId, isAdmin, onRequest, onApprove, onReject, onEnd, onReset }: {
-  table: PokerTable;
-  profileId: string;
-  isAdmin: boolean;
-  onRequest: (amount: number) => void;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
-  onEnd: (finals: Record<string, number>) => void;
-  onReset: () => void;
-}) => {
-  const navigate = useNavigate();
-  const [openBuyIn, setOpenBuyIn] = useState(false);
-  const [amount, setAmount] = useState('50');
-  const [openEnd, setOpenEnd] = useState(false);
-  const [finals, setFinals] = useState<Record<string, string>>({});
-
-  const pending = table.requests;
-  
-  // Calculate totals for end game validation
-  const totalBuyIns = table.players.reduce((sum, p) => sum + p.totalBuyIns, 0);
-
-  return (
-    <div className="space-y-8">
-      <Card className="shadow-elegant">
-        <CardHeader>
-          <CardTitle>Table {table.name ? `— ${table.name}` : ''}</CardTitle>
-          <CardDescription>Join code: {table.joinCode}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UITable>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Player</TableHead>
-                <TableHead className="text-right">Total Buy-ins</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {table.players.map((p) => (
-                <TableRow key={p.id} className={p.id === profileId ? 'bg-accent/10' : ''}>
-                  <TableCell>{p.name}</TableCell>
-                  <TableCell className="text-right">${p.totalBuyIns.toFixed(2)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </UITable>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
-              <DialogTrigger asChild>
-                <Button variant="hero">Request Buy-in</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Request Buy-in</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount (can be negative)</Label>
-                  <Input id="amount" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                </div>
-                <DialogFooter>
-                  <Button onClick={() => { onRequest(parseFloat(amount || '0')); setOpenBuyIn(false); }}>Submit</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            <Button variant="secondary" onClick={() => navigate('/history')}>
-              History
-            </Button>
-
-            {isAdmin && (
-              <>
-                <Dialog open={openEnd} onOpenChange={setOpenEnd}>
-                  <DialogTrigger asChild>
-                    <Button variant="destructive">End Game</Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>End Game - Final Amounts</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <UITable>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Player</TableHead>
-                            <TableHead className="text-right">Total Buy-ins</TableHead>
-                            <TableHead className="text-right">Final Amount</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {table.players.map((p) => (
-                            <TableRow key={p.id}>
-                              <TableCell>{p.name}</TableCell>
-                              <TableCell className="text-right">${p.totalBuyIns.toFixed(2)}</TableCell>
-                              <TableCell>
-                                <Input 
-                                  type="number" 
-                                  inputMode="decimal" 
-                                  value={finals[p.id] ?? ''} 
-                                  onChange={(e) => setFinals({ ...finals, [p.id]: e.target.value })}
-                                  className="text-right"
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          <TableRow className="border-t-2 font-bold">
-                            <TableCell>TOTALS</TableCell>
-                            <TableCell className="text-right">${totalBuyIns.toFixed(2)}</TableCell>
-                            <TableCell className="text-right">
-                              ${Object.entries(finals).reduce((sum, [_, v]) => sum + parseFloat(v || '0'), 0).toFixed(2)}
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </UITable>
-                      <p className="text-sm text-muted-foreground">
-                        Note: Total buy-ins should equal total final amounts for a balanced game.
-                      </p>
-                    </div>
-                    <DialogFooter>
-                      <Button onClick={() => {
-                        const parsed: Record<string, number> = {};
-                        Object.entries(finals).forEach(([k, v]) => parsed[k] = parseFloat(v || '0'));
-                        onEnd(parsed);
-                        setOpenEnd(false);
-                      }}>Save & Calculate</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-                <Button variant="outline" onClick={onReset}>Reset Table</Button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {isAdmin && pending.length > 0 && (
-        <Card className="shadow-elegant">
-          <CardHeader>
-            <CardTitle>Pending Approvals</CardTitle>
-            <CardDescription>Approve or reject buy-in requests</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {pending.map((r) => (
-                <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
-                  <div>
-                    <div className="font-medium">{table.players.find((p) => p.id === r.playerId)?.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {r.amount >= 0 ? '+' : ''}${r.amount.toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => onApprove(r.id)}>Approve</Button>
-                    <Button size="sm" variant="outline" onClick={() => onReject(r.id)}>Reject</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="shadow-elegant">
-        <CardHeader>
-          <CardTitle>All Players</CardTitle>
-          <CardDescription>Current players and their total buy-ins</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UITable>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Player</TableHead>
-                <TableHead className="text-right">Total Buy-ins</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {table.players.map((p) => (
-                <TableRow key={p.id} className={p.id === profileId ? 'bg-accent/10' : ''}>
-                  <TableCell>{p.name}</TableCell>
-                  <TableCell className="text-right">${p.totalBuyIns.toFixed(2)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </UITable>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
-
-const Results = ({ table, onReset }: { table: PokerTable; onReset: () => void }) => {
-  return (
-    <Card className="shadow-elegant">
-      <CardHeader>
-        <CardTitle>Final Results</CardTitle>
-        <CardDescription>Profit/Loss = Final Amount - Total Buy-ins</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <UITable>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Player</TableHead>
-              <TableHead className="text-right">Total Buy-ins</TableHead>
-              <TableHead className="text-right">Final Amount</TableHead>
-              <TableHead className="text-right">Profit/Loss</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {table.players.map((p) => {
-              const final = p.finalAmount ?? 0;
-              const pnl = final - p.totalBuyIns;
-              return (
-                <TableRow key={p.id}>
-                  <TableCell>{p.name}</TableCell>
-                  <TableCell className="text-right">${p.totalBuyIns.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">${final.toFixed(2)}</TableCell>
-                  <TableCell className={`text-right ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </UITable>
-        <div className="mt-6 flex gap-3">
-          <Button onClick={onReset}>Reset Table</Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+// Clarification:
+// The variable `table` in your code refers to a row/object from the Supabase table named "poker_tables" in your database.
+// It is not a table named "table" in your database.
+// The database table is "poker_tables", and each "table" variable in your code is a single game/table instance (row) from "poker_tables".
 
 export default Index;
+
+// Analysis of your logs and behavior:
+
+// - When you first send a join request as a user, the page does not update after admin approval.
+// - After clearing cache/storage and creating a new user, the join request and approval work as expected.
+
+// **What this means:**
+// - The issue is likely caused by stale or incorrect data in localStorage/sessionStorage (used by your storage utility).
+// - If the user's profile or table info in storage is out of sync with the database, the real-time logic may not run or may use the wrong table/profile.
+// - When you clear the cache/storage and start fresh, the state is correct and everything works.
+
+// **How to fix/prevent:**
+// - Always update local storage (profile and table) immediately after onboarding and after join request/approval.
+// - Make sure your storage utility does not return stale/null data.
+// - Consider adding a check to reload profile/table from the database if storage returns null or outdated data.
+// - Add logging to your storage utility to debug what is being set and retrieved.
+
+// **Summary:**
+// - The root cause is stale or missing data in local storage.
+// - Clearing cache/storage resets the state and fixes the issue.
+// - Ensure your storage logic is robust and always in sync with the latest user and table data.
+
+// Analysis:
+
+// - The admin page logs show that after approval, the table's players array is updated correctly (shows 2 players).
+// - The joining player's page does NOT update to PokerTable immediately after approval; it stays on TableSelection.
+// - The debug logs show that the joining player's ID is NOT present in the table's players array when their client fetches the table after approval, but the admin's client sees the correct array.
+
+// **Possible causes:**
+// 1. **Race condition or delay:** The joining player's client may be fetching the table before the database update is fully committed or before the real-time event is triggered.
+// 2. **Local state not refreshed:** The joining player's client may not be refreshing its table state after the real-time event, or the table state is stale.
+// 3. **Multiple fetches:** The logs show multiple renders and fetches; ensure only one fetchTable runs per real-time event.
+
+// **What to check/fix:**
+// - Make sure the joining player's client waits for the real-time event and only transitions to PokerTable when their ID is present in the table's players array.
+// - Add a log in the real-time event handler to show the fetched table's players array and the current user's ID.
+// - If the table is not updated, add a short delay (setTimeout) before calling fetchTable to allow the database update to propagate.
+// - Ensure the table state is always updated with the latest data from Supabase, not from local storage.
+
+// **Summary:**
+// - The admin logic is correct and the database is updated.
+// - The joining player's client may be fetching stale data or fetching too soon.
+// - Add logging and possibly a short delay in the real-time event handler for the joining player's client to ensure the table update is detected.
+
+// To update the database accordingly (so the joining player's ID is added to the table's players array):
+// This must be done in the admin approval logic, typically in PokerTable.tsx, handleApproveJoin:
+
+// Example (already in your PokerTable.tsx):
+// When the admin approves a join request:
+//await supabase
+//  .from('poker_tables')
+//  .update({ players: updatedPlayers }) // updatedPlayers includes the new joining player
+//  .eq('id', table.id);
+
+// This ensures the database row for the table is updated with the new players array.
+// The real-time subscription in Index.tsx will then detect the change and update the joining user's page.
