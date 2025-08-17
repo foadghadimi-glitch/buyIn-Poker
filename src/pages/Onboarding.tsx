@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Profile } from '@/types';
 import { storage, uid } from '@/utils/storage';
@@ -7,32 +7,53 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-const Onboarding = () => {
+import { v4 as uuidv4 } from 'uuid';
+
+const Onboarding = (props: { onSetProfile: (profile: any) => void }) => {
   const navigate = useNavigate();
   const existing = storage.getProfile();
   const [name, setName] = useState(existing?.name ?? '');
-  const [avatar, setAvatar] = useState<string | null>(existing?.avatar ?? null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     document.title = 'Onboarding — Poker Buy-in Tracker';
   }, []);
-  const onPick = () => fileRef.current?.click();
 
-  const onFile = async (f: File) => {
-    const reader = new FileReader();
-    reader.onload = () => setAvatar(reader.result as string);
-    reader.readAsDataURL(f);
-  };
-
-  const onSubmit = () => {
+  const onSubmit = async () => {
     if (!name.trim()) return;
+    let finalName = name.trim();
+
+    // Check for existing names in the users table
+    const { data: existingUsers, error } = await supabase
+      .from('users')
+      .select('name')
+      .ilike('name', `${finalName}%`);
+
+    if (!error && existingUsers) {
+      // Count how many users have the same base name or base name with _number
+      const sameBase = existingUsers.filter((u: { name: string }) =>
+        u.name === finalName || u.name.startsWith(`${finalName}_`)
+      );
+      if (sameBase.length > 0) {
+        finalName = `${finalName}_${sameBase.length}`;
+      }
+    }
+
+    // Use a valid UUID for id
     const profile: Profile = {
-      id: existing?.id ?? uid('p_'),
-      name: name.trim(),
-      avatar,
+      id: uuidv4(),
+      name: finalName,
+      avatar: null,
     };
+
+    // Save to 'users' table in the database and check for errors
+    const { error: insertError } = await supabase.from('users').insert(profile);
+    if (insertError) {
+      alert(`Failed to save profile. Error: ${insertError.message || 'Unknown error'}`);
+      return;
+    }
+
     storage.setProfile(profile);
+    props.onSetProfile(profile);
     navigate('/');
   };
 
@@ -44,39 +65,23 @@ const Onboarding = () => {
           <CardDescription>Set up your player profile</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={onPick}
-                className="relative inline-flex h-16 w-16 items-center justify-center rounded-full border border-border bg-muted/40 hover:bg-muted transition-colors"
-                aria-label="Choose avatar"
-              >
-                {avatar ? (
-                  <img src={avatar} alt="Player avatar" className="h-16 w-16 rounded-full object-cover" />
-                ) : (
-                  <span className="text-sm text-muted-foreground">Add</span>
-                )}
-              </button>
-              <div className="space-y-2 flex-1">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  placeholder="Your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
+          <div className="space-y-8">
+            {/* Playing card suits row */}
+            <div className="flex justify-center gap-6 text-4xl mb-2">
+              <span title="Spade" style={{color: "#222"}}>♠️</span>
+              <span title="Heart" style={{color: "#e53e3e"}}>♥️</span>
+              <span title="Diamond" style={{color: "#3182ce"}}>♦️</span>
+              <span title="Club" style={{color: "#222"}}>♣️</span>
             </div>
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => e.target.files && onFile(e.target.files[0])}
-            />
-
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                placeholder="Your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
             <Button onClick={onSubmit} className="w-full" variant="hero">
               Continue
             </Button>
