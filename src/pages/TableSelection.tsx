@@ -58,6 +58,14 @@ const TableSelection = ({
 
   const handleCreateTable = async () => {
     if (!profile) return;
+    
+    // Get the authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      alert('You must be logged in to create a table.');
+      return;
+    }
+    
     let finalTableName = tableName.trim();
 
     // Check for existing table names in the database
@@ -81,9 +89,9 @@ const TableSelection = ({
     const newTable = {
       id: tableId,
       join_code,
-      admin_user_id: profile.id,
+      admin_user_id: user.id, // Use authenticated user ID
       status: 'active',
-      players: [{ id: profile.id, name: profile.name, totalPoints: 0 }],
+      players: [{ id: user.id, name: profile.name, totalPoints: 0 }],
       name: finalTableName
     };
     const { data, error: insertError } = await supabase
@@ -103,6 +111,14 @@ const TableSelection = ({
 
   const handleJoinTable = async () => {
     if (!profile) return;
+    
+    // Get the authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      alert('You must be logged in to join a table.');
+      return;
+    }
+    
     const codeInt = parseInt(joinCode, 10);
     if (isNaN(codeInt) || codeInt < 1000 || codeInt > 9999) {
       alert('Please enter a valid 4-digit join code.');
@@ -127,7 +143,7 @@ const TableSelection = ({
       .from('join_requests')
       .select('*')
       .eq('table_id', tableData.id)
-      .eq('player_id', profile.id)
+      .eq('player_id', user.id) // Use authenticated user ID
       .eq('status', 'pending');
 
     if (!reqError && existingReqs && existingReqs.length > 0) {
@@ -139,7 +155,7 @@ const TableSelection = ({
     const joinReq = {
       id: uuidv4(),
       table_id: tableData.id,
-      player_id: profile.id,
+      player_id: user.id, // Use authenticated user ID
       player_name: profile.name,
       status: 'pending'
     };
@@ -155,7 +171,7 @@ const TableSelection = ({
       .send({
         type: 'broadcast',
         event: 'join_request_created',
-        payload: { tableId: tableData.id, playerId: profile.id, playerName: profile.name }
+        payload: { tableId: tableData.id, playerId: user.id, playerName: profile.name }
       });
 
     // Just call onJoinTable to trigger waitingApproval UI
