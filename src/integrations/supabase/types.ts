@@ -17,29 +17,26 @@ export type Database = {
       buy_in_requests: {
         Row: {
           amount: number
-          approved_at: string | null
-          created_at: string
+          created_at: string | null
           id: string
           player_id: string
-          status: Database["public"]["Enums"]["buy_in_request_status"]
+          status: string
           table_id: string
         }
         Insert: {
           amount: number
-          approved_at?: string | null
-          created_at?: string
-          id?: string
+          created_at?: string | null
+          id: string
           player_id: string
-          status?: Database["public"]["Enums"]["buy_in_request_status"]
+          status?: string
           table_id: string
         }
         Update: {
           amount?: number
-          approved_at?: string | null
-          created_at?: string
+          created_at?: string | null
           id?: string
           player_id?: string
-          status?: Database["public"]["Enums"]["buy_in_request_status"]
+          status?: string
           table_id?: string
         }
         Relationships: [
@@ -47,7 +44,7 @@ export type Database = {
             foreignKeyName: "buy_in_requests_player_id_fkey"
             columns: ["player_id"]
             isOneToOne: false
-            referencedRelation: "table_players"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -59,73 +56,192 @@ export type Database = {
           },
         ]
       }
-      poker_tables: {
+      buy_ins: {
         Row: {
-          admin_user_id: string | null
+          admin_id: string
+          amount: number
           created_at: string
           id: string
-          join_code: string
-          name: string | null
-          status: Database["public"]["Enums"]["table_status"]
+          notes: string | null
+          player_id: string
+          status: string
+          table_id: string
+          timestamp: string
           updated_at: string
         }
         Insert: {
-          admin_user_id?: string | null
+          admin_id: string
+          amount: number
           created_at?: string
           id?: string
-          join_code: string
-          name?: string | null
-          status?: Database["public"]["Enums"]["table_status"]
+          notes?: string | null
+          player_id: string
+          status?: string
+          table_id: string
+          timestamp?: string
           updated_at?: string
         }
         Update: {
-          admin_user_id?: string | null
+          admin_id?: string
+          amount?: number
           created_at?: string
           id?: string
-          join_code?: string
-          name?: string | null
-          status?: Database["public"]["Enums"]["table_status"]
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      table_players: {
-        Row: {
-          avatar_url: string | null
-          created_at: string
-          final_amount: number | null
-          id: string
-          name: string
-          table_id: string
-          total_buy_ins: number
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          final_amount?: number | null
-          id?: string
-          name: string
-          table_id: string
-          total_buy_ins?: number
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string
-          final_amount?: number | null
-          id?: string
-          name?: string
+          notes?: string | null
+          player_id?: string
+          status?: string
           table_id?: string
-          total_buy_ins?: number
+          timestamp?: string
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "table_players_table_id_fkey"
+            foreignKeyName: "buy_ins_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buy_ins_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buy_ins_table_id_fkey"
             columns: ["table_id"]
             isOneToOne: false
             referencedRelation: "poker_tables"
             referencedColumns: ["id"]
           },
         ]
+      }
+      join_requests: {
+        Row: {
+          created_at: string | null
+          id: string
+          player_id: string
+          player_name: string | null
+          status: string
+          table_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          player_id: string
+          player_name?: string | null
+          status?: string
+          table_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          player_id?: string
+          player_name?: string | null
+          status?: string
+          table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_requests_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "join_requests_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "poker_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      poker_tables: {
+        Row: {
+          admin_user_id: string
+          id: string
+          join_code: number
+          name: string | null
+          players: Json
+          status: string
+        }
+        Insert: {
+          admin_user_id: string
+          id: string
+          join_code: number
+          name?: string | null
+          players: Json
+          status?: string
+        }
+        Update: {
+          admin_user_id?: string
+          id?: string
+          join_code?: number
+          name?: string | null
+          players?: Json
+          status?: string
+        }
+        Relationships: []
+      }
+      table_endups: {
+        Row: {
+          endup: number
+          id: string
+          player_id: string
+          table_id: string
+          updated_at: string
+        }
+        Insert: {
+          endup?: number
+          id?: string
+          player_id: string
+          table_id: string
+          updated_at?: string
+        }
+        Update: {
+          endup?: number
+          id?: string
+          player_id?: string
+          table_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_endups_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_endups_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "poker_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          avatar: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          avatar?: string | null
+          id: string
+          name: string
+        }
+        Update: {
+          avatar?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -136,6 +252,7 @@ export type Database = {
     }
     Enums: {
       buy_in_request_status: "pending" | "approved" | "rejected"
+      request_status: "pending" | "approved" | "rejected"
       table_status: "active" | "ended"
     }
     CompositeTypes: {
@@ -265,6 +382,7 @@ export const Constants = {
   public: {
     Enums: {
       buy_in_request_status: ["pending", "approved", "rejected"],
+      request_status: ["pending", "approved", "rejected"],
       table_status: ["active", "ended"],
     },
   },

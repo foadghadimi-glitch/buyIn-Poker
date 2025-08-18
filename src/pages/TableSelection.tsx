@@ -149,6 +149,15 @@ const TableSelection = ({
       return;
     }
 
+    // Notify admin in realtime about the new join request
+    await supabase
+      .channel('user_' + tableData.admin_user_id)
+      .send({
+        type: 'broadcast',
+        event: 'join_request_created',
+        payload: { tableId: tableData.id, playerId: profile.id, playerName: profile.name }
+      });
+
     // Just call onJoinTable to trigger waitingApproval UI
     if (typeof onJoinTable === 'function') {
       onJoinTable(tableData);

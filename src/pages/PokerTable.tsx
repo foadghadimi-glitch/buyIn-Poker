@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogHeader as HistoryDialogHeader, DialogTitle as HistoryDialogTitle, DialogFooter as HistoryDialogFooter, DialogTrigger as HistoryDialogTrigger } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 // Define the type for a player
 type TablePlayer = {
@@ -175,6 +176,34 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       supabase.removeChannel(buyInChannel);
     };
   }, [table, isAdmin]);
+
+  // Listen for broadcast notifications for new join requests (admin only)
+  useEffect(() => {
+    if (!table || !isAdmin || !profile?.id) return;
+
+    const notifChannel = supabase
+      .channel('user_' + profile.id)
+      .on('broadcast', { event: 'join_request_created' }, async (payload) => {
+        try {
+          toast('New join request', {
+            description: `${payload?.payload?.playerName || 'A player'} requested to join`,
+          });
+          const { data, error } = await (supabase as any)
+            .from('join_requests')
+            .select('*')
+            .eq('table_id', table.id)
+            .eq('status', 'pending');
+          if (!error && data) setPendingJoinRequests(data);
+        } catch (e) {
+          console.error('Error handling join_request_created broadcast', e);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notifChannel);
+    };
+  }, [table, isAdmin, profile?.id]);
 
   // Ensure real-time updates for total points (buy-ins) for both the current user and all players
   useEffect(() => {

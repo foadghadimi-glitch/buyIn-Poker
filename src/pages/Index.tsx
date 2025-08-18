@@ -81,7 +81,7 @@ const Index = () => {
     // Add debug log to show fetched table players and current user id
     const fetchTable = async () => {
       addLog('[Index] fetchTable called');
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('poker_tables')
         .select('*')
         .eq('id', table.id)
@@ -102,11 +102,11 @@ const Index = () => {
             const tableObj = {
               id: data.id,
               name: data.name,
-              joinCode: data.join_code,
-              adminId: data.admin_user_id,
-              status: data.status,
-              createdAt: data.created_at,
-              updatedAt: data.updated_at,
+              joinCode: (data as any).join_code,
+              adminId: (data as any).admin_user_id,
+              status: (data as any).status,
+              createdAt: (data as any).created_at,
+              updatedAt: (data as any).updated_at,
               players: playersArray,
             };
             storage.setTable(tableObj);
@@ -176,14 +176,14 @@ const Index = () => {
     console.log('[Index] Onboarding complete:', profileData);
     // Check if profile exists in Supabase
     const { data: existingProfile, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id')
       .eq('id', profileData.id)
-      .single();
+      .maybeSingle();
 
     if (!existingProfile && !error) {
       // Insert profile if not exists
-      await supabase.from('profiles').insert([profileData]);
+      await supabase.from('users').insert([profileData]);
     }
     storage.setProfile(profileData);
     setProfile(profileData);
@@ -284,10 +284,10 @@ const Index = () => {
     // Fetch latest profile and table from Supabase in background
     if (storedProfile) {
       supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', storedProfile.id)
-        .single()
+        .maybeSingle()
         .then(({ data: profileData, error: profileError }) => {
           if (!profileError && profileData) {
             storage.setProfile(profileData);
@@ -307,31 +307,15 @@ const Index = () => {
           .then(async ({ data, error }) => {
             if (!error && data) {
               const playersArray = Array.isArray(data.players) ? data.players : [];
-              // Fetch latest points for all players
-              if (playersArray.length > 0) {
-                const playerIds = playersArray.map((p: any) => p.id);
-                const { data: profilesData, error: profilesError } = await supabase
-                  .from('profiles')
-                  .select('id,points')
-                  .in('id', playerIds);
-
-                let mergedPlayers = playersArray;
-                if (!profilesError && profilesData) {
-                  // Merge points from profiles into players array
-                  mergedPlayers = playersArray.map((p: any) => {
-                    const profile = profilesData.find((prof: any) => prof.id === p.id);
-                    return profile ? { ...p, points: profile.points } : p;
-                  });
-                }
-
-                const tableObj = {
+              // Note: Points will be merged in the refresh effect using buy_ins
+              let mergedPlayers = playersArray;
                   id: data.id,
                   name: data.name,
                   joinCode: data.join_code,
                   adminId: data.admin_user_id,
                   status: data.status,
-                  createdAt: data.created_at,
-                  updatedAt: data.updated_at,
+                  createdAt: (data as any).created_at,
+                  updatedAt: (data as any).updated_at,
                   players: mergedPlayers,
                 };
                 // Log before saving to storage:
@@ -346,8 +330,8 @@ const Index = () => {
                   joinCode: data.join_code,
                   adminId: data.admin_user_id,
                   status: data.status,
-                  createdAt: data.created_at,
-                  updatedAt: data.updated_at,
+                  createdAt: (data as any).created_at,
+                  updatedAt: (data as any).updated_at,
                   players: [],
                 };
                 // Log before saving to storage:
@@ -405,10 +389,10 @@ const Index = () => {
           addLog(`[Index] Admin ID from DB: ${adminId}`);
           if (adminId) {
             const { data: adminProfile, error: adminProfileError } = await supabase
-              .from('profiles')
+              .from('users')
               .select('id,name')
               .eq('id', adminId)
-              .single();
+              .maybeSingle();
             if (adminProfileError) {
               addLog(`[Index] Error fetching admin profile: ${adminProfileError.message}`);
             }
@@ -417,7 +401,7 @@ const Index = () => {
           }
 
           supabase
-            .from('profiles')
+            .from('users')
             .select('id,name')
             .in('id', playerIds)
             .then(async ({ data: profilesData, error: profilesError }) => {

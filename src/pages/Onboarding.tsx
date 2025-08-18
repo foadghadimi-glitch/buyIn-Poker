@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 
-const Onboarding = (props: { onSetProfile: (profile: any) => void }) => {
+const Onboarding = (props: { onSetProfile?: (profile: any) => void }) => {
   const navigate = useNavigate();
   const existing = storage.getProfile();
   const [name, setName] = useState(existing?.name ?? '');
@@ -53,7 +53,7 @@ const Onboarding = (props: { onSetProfile: (profile: any) => void }) => {
     }
 
     storage.setProfile(profile);
-    props.onSetProfile(profile);
+    props.onSetProfile?.(profile);
     navigate('/');
   };
 
