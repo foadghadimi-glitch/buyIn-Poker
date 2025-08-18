@@ -117,9 +117,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
 
     // Initial fetch
     const fetchJoinRequests = async () => {
-      // @ts-expect-error: join_requests table is not in generated types
-      // @ts-expect-error: join_requests table is not in generated types
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('join_requests')
         .select('*')
         .eq('table_id', table.id)
@@ -240,10 +238,10 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 .eq('id', table.id)
                 .single();
 
-              if (tableData && tableData.players) {
+              if (tableData && Array.isArray(tableData.players)) {
                 setTable((prev: any) => ({
                   ...prev,
-                  players: tableData.players.map((p: any) => ({
+                  players: (tableData.players as any[]).map((p: any) => ({
                     ...p,
                     totalPoints: totals[p.id] || 0
                   }))
@@ -392,23 +390,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     console.log('[PokerTable] setTable called with updated players:', updatedPlayers);
 
     // --- Notify the joining player (client) ---
-    // Find the device ID of the joining player (assuming it's stored in the players array)
-    const playerDeviceId = storage.getDeviceId(userProfile.id);
-    console.log('[PokerTable] Fetched device ID for player:', playerDeviceId);
-
-    if (playerDeviceId) {
-      // Send a real-time notification to the joining player
-      supabase
-        .channel('table_' + table.id)
-        .send({
-          type: 'broadcast',
-          event: 'player_joined',
-          payload: { tableId: table.id, playerId: userProfile.id }
-        });
-      console.log('[PokerTable] Real-time notification sent to joining player:', userProfile.id);
-    } else {
-      console.warn('[PokerTable] Device ID not found for player:', userProfile.id);
-    }
+    console.log('[PokerTable] Notifying player about successful join');
 
     // After successful approval and table update:
     // Send a broadcast event to notify the joining user

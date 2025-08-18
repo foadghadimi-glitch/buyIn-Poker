@@ -27,24 +27,24 @@ const History = () => {
 
     // Fetch buy-in history from Supabase
     const fetchHistory = async () => {
-      const { data, error } = await supabase
-        .from('buy_in_requests')
+        const { data, error } = await supabase
+        .from('buy_ins')
         .select('*')
-        .eq('status', 'approved')
-        .order('approved_at', { ascending: false });
+        .eq('table_id', table.id)
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Failed to fetch buy-in history:', error);
         return;
       }
 
-        const historyWithNames = data.map(request => {
-          const player = table.players.find(p => p.id === request.player_id);
+        const historyWithNames = data.map(buyIn => {
+          const player = table.players.find(p => p.id === buyIn.player_id);
           return {
-            id: request.id,
+            id: buyIn.id,
             playerName: player?.name || 'Unknown Player',
-            amount: parseFloat(String(request.amount)),
-            approved_at: request.approved_at || '',
+            amount: parseFloat(String(buyIn.amount)),
+            approved_at: buyIn.created_at || '',
           };
         });
 

@@ -309,36 +309,22 @@ const Index = () => {
               const playersArray = Array.isArray(data.players) ? data.players : [];
               // Note: Points will be merged in the refresh effect using buy_ins
               let mergedPlayers = playersArray;
-                  id: data.id,
-                  name: data.name,
-                  joinCode: data.join_code,
-                  adminId: data.admin_user_id,
-                  status: data.status,
-                  createdAt: (data as any).created_at,
-                  updatedAt: (data as any).updated_at,
-                  players: mergedPlayers,
-                };
-                // Log before saving to storage:
-                console.log('[Index] Saving tableObj to storage:', tableObj);
-                storage.setTable(tableObj);
-                setTable(tableObj);
-                // Optionally update currentPage if needed
-              } else {
-                const tableObj = {
-                  id: data.id,
-                  name: data.name,
-                  joinCode: data.join_code,
-                  adminId: data.admin_user_id,
-                  status: data.status,
-                  createdAt: (data as any).created_at,
-                  updatedAt: (data as any).updated_at,
-                  players: [],
-                };
-                // Log before saving to storage:
-                console.log('[Index] Saving tableObj to storage (empty players):', tableObj);
-                storage.setTable(tableObj);
-                setTable(tableObj);
-              }
+              
+              const tableObj = {
+                id: data.id,
+                name: data.name,
+                joinCode: data.join_code,
+                adminId: data.admin_user_id,
+                status: data.status,
+                createdAt: (data as any).created_at,
+                updatedAt: (data as any).updated_at,
+                players: mergedPlayers,
+              };
+              // Log before saving to storage:
+              console.log('[Index] Saving tableObj to storage:', tableObj);
+              storage.setTable(tableObj);
+              setTable(tableObj);
+              // Optionally update currentPage if needed
             } else {
               addLog('[Index] Error fetching table on initial load:', error);
             }
@@ -363,7 +349,7 @@ const Index = () => {
       // Always fetch latest table info for admin/join code and name from DB
       supabase
         .from('poker_tables')
-        .select('id,join_code,admin_user_id,name')
+        .select('*')
         .eq('id', table.id)
         .single()
         .then(async ({ data: tableData, error: tableError }) => {
@@ -453,8 +439,8 @@ const Index = () => {
                 joinCode: tableData.join_code,
                 adminId: tableData.admin_user_id,
                 status: tableData.status,
-                createdAt: tableData.created_at,
-                updatedAt: tableData.updated_at,
+                createdAt: (tableData as any).created_at,
+                updatedAt: (tableData as any).updated_at,
                 players: mergedPlayers,
                 adminName,
               });
@@ -466,8 +452,8 @@ const Index = () => {
                 adminName,
                 joinCode,
                 name: tableData.name,
-                createdAt: tableData.created_at,
-                updatedAt: tableData.updated_at,
+                createdAt: (tableData as any).created_at,
+                updatedAt: (tableData as any).updated_at,
                 status: tableData.status,
               };
               // Log before saving to storage:
@@ -569,7 +555,7 @@ const Index = () => {
       console.log('[Index] SHOWING: Loading player points... | isRefresh:', isRefresh, '| table.players:', table.players);
       return <div className="min-h-screen flex items-center justify-center">Loading player points...</div>;
     }
-    return <PokerTable table={table} isRefresh={isRefresh} />;
+    return <PokerTable table={table} />;
   }
 
   return (
