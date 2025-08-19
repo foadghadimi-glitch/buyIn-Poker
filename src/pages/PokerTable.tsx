@@ -18,6 +18,7 @@ type TablePlayer = {
   name: string;
   totalPoints?: number;
   active?: boolean;
+  pending?: boolean; // waiting for admin approval
 };
 
 type PokerTableRow = {
@@ -38,6 +39,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const navigate = useNavigate();
   const profile = storage.getProfile();
   const [table, setTable] = useState<any>(propTable || storage.getTable());
+  // Keep table state locked to incoming propTable when provided (avoid transient null state)
+  useEffect(() => {
+    if (propTable && propTable.id) {
+      setTable(propTable);
+    }
+  }, [propTable]);
   const [openBuyIn, setOpenBuyIn] = useState(false);
   const [openHistory, setOpenHistory] = useState(false); // Add state for history dialog
   const [openEndUp, setOpenEndUp] = useState(false); // Add state for end up dialog
@@ -57,68 +64,314 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [players, setPlayers] = useState<TablePlayer[]>(table?.players || []);
 
   // Track join-request IDs we've already shown notifications for to avoid duplicates
+  // store composite keys "requestId:tableId" to avoid cross-table dupes
   const shownJoinRequestIdsRef = useRef<Set<string>>(new Set());
+  // Track player IDs that currently have a pending join_request for this table
+  const [pendingJoinPlayerIds, setPendingJoinPlayerIds] = useState<Set<string>>(new Set());
+
+  // Keep pending join requests in sync (used by loadPlayersFromJoinTable to mark pending)
+  useEffect(() => {
+    if (!table?.id) return;
+    let mounted = true;
+    const fetchPending = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('join_requests')
+          .select('player_id')
+          .eq('table_id', table.id)
+          .eq('status', 'pending');
+        if (!error && mounted) {
+          setPendingJoinPlayerIds(new Set((data || []).map((r: any) => r.player_id).filter(Boolean)));
+        } else if (mounted) {
+          setPendingJoinPlayerIds(new Set());
+        }
+      } catch (e) {
+        if (mounted) setPendingJoinPlayerIds(new Set());
+      }
+    };
+    fetchPending();
+
+    const channel = supabase
+      .channel('join_requests_client_' + table.id)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'join_requests', filter: `table_id=eq.${table.id}` },
+        () => { fetchPending(); }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [table?.id]);
+
+  // Recompute players whenever pending join IDs or totals change (ensures UI reflects pending state immediately)
+  useEffect(() => {
+    if (!table?.id) return;
+    loadPlayersFromJoinTable(table.id);
+  }, [pendingJoinPlayerIds, playerTotals, table?.id]);
+
+  // Subscribe to table_players changes so we refresh players when rows are inserted/updated/deleted
+  useEffect(() => {
+    if (!table?.id) return;
+    const ch = supabase
+      .channel('table_players_' + table.id)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'table_players', filter: `table_id=eq.${table.id}` },
+        async (payload) => {
+          // Always refresh players when table_players changes
+          loadPlayersFromJoinTable(table.id);
+
+          try {
+            // Defensive enforcement: if the current user was re-activated directly (without a pending join_request),
+            // require admin approval instead of leaving them active.
+            // Only enforce for the current user's id.
+            const newRow = payload?.new;
+            const oldRow = payload?.old;
+            if (!newRow || !profile?.id) return;
+            const newPlayerId = newRow.player_id ?? newRow.user_id;
+            if (newPlayerId !== profile.id) return;
+
+            // If row became active (or inserted active) and previously wasn't active, schedule a verification.
+            const becameActive = (newRow.status === 'active') && (oldRow?.status !== 'active');
+            if (!becameActive) return;
+
+            // Short grace period to allow a legitimate admin-approve flow (which may update table_players and delete join_request)
+            setTimeout(async () => {
+              try {
+                // Re-check: is there any pending join_request for this player & table?
+                const { data: pendingReqs } = await supabase
+                  .from('join_requests')
+                  .select('*')
+                  .eq('table_id', table.id)
+                  .eq('player_id', profile.id)
+                  .eq('status', 'pending');
+
+                // If there is a pending request, do nothing (join flow in progress / awaiting approval)
+                if (pendingReqs && pendingReqs.length > 0) return;
+
+                // Also check whether admin may have approved very shortly (we already allowed a grace period),
+                // re-query the current table_players row status to confirm it's still 'active'.
+                const { data: tpRows } = await supabase
+                  .from('table_players')
+                  .select('*')
+                  .eq('table_id', table.id)
+                  .eq('player_id', profile.id);
+
+                const tpRow = Array.isArray(tpRows) && tpRows[0];
+                if (!tpRow || tpRow.status !== 'active') return; // nothing to do
+
+                // No pending join_request found and row is active — treat this as a bypass and revert to inactive,
+                // then create a join_request so admin must approve.
+                console.warn('[PokerTable] Detected activation of current user without pending join_request — reverting and creating join_request.');
+
+                // Attempt to set table_players.status back to 'inactive'
+                try {
+                  await supabase
+                    .from('table_players')
+                    .update({ status: 'inactive' })
+                    .match({ table_id: table.id, player_id: profile.id });
+                } catch (e) {
+                  console.warn('[PokerTable] Failed to set table_players to inactive (ignored):', e);
+                }
+
+                // Insert a pending join_request if one doesn't already exist (race-safe unique id)
+                try {
+                  const existing = await supabase
+                    .from('join_requests')
+                    .select('id')
+                    .eq('table_id', table.id)
+                    .eq('player_id', profile.id)
+                    .maybeSingle();
+                  if (!existing.data) {
+                    await supabase.from('join_requests').insert({
+                      id: uuidv4(),
+                      table_id: table.id,
+                      player_id: profile.id,
+                      status: 'pending',
+                      created_at: new Date().toISOString()
+                    });
+                  }
+                } catch (e) {
+                  console.warn('[PokerTable] Failed to insert join_request (ignored):', e);
+                }
+
+                // Refresh local pending sets and players
+                try {
+                  const { data: freshPending } = await supabase
+                    .from('join_requests')
+                    .select('player_id')
+                    .eq('table_id', table.id)
+                    .eq('status', 'pending');
+                  setPendingJoinPlayerIds(new Set((freshPending || []).map((r: any) => r.player_id).filter(Boolean)));
+                } catch (e) { /* ignore */ }
+                await loadPlayersFromJoinTable(table.id);
+
+                // Notify user
+                toast('Join request created', { description: 'Admin approval is required to re-join this table.' });
+              } catch (e) {
+                console.error('[PokerTable] Error verifying re-activation:', e);
+              }
+            }, 800);
+          } catch (e) {
+            console.error('[PokerTable] table_players subscription handler error:', e);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [table?.id, profile?.id]);
+
+  // Auto-approve rejoin for returning players:
+  // If a join_request is created and the player already has a table_players row for this table
+  // (i.e. they were a member before), automatically activate them and remove the join_request.
+  useEffect(() => {
+    if (!table?.id) return;
+    const ch = supabase
+      .channel('join_requests_auto_' + table.id)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'join_requests', filter: `table_id=eq.${table.id}` },
+        async (payload) => {
+          try {
+            const newReq = payload?.new;
+            if (!newReq) return;
+            const playerId = newReq.player_id;
+             if (!playerId) return;
+ 
+             // Check if this player had a prior membership row in table_players for this table
+             const { data: prior, error: priorErr } = await supabase
+               .from('table_players')
+               .select('*')
+               .eq('table_id', table.id)
+               .eq('player_id', playerId)
+               .maybeSingle();
+             if (priorErr) {
+               console.warn('[PokerTable] Error checking prior membership for auto-approve:', priorErr);
+               return;
+             }
+ 
+             // If prior membership exists (even inactive), auto-activate and delete join_request.
+             if (prior) {
+               // Upsert to set active (use update if exists, insert if not)
+               if (prior.id) {
+                 await supabase
+                   .from('table_players')
+                   .update({ status: 'active' })
+                   .match({ table_id: table.id, player_id: playerId });
+               } else {
+                 await supabase
+                   .from('table_players')
+                   .insert({ table_id: table.id, player_id: playerId, status: 'active' });
+               }
+ 
+               // Remove the join_request (so admin is not notified for this case)
+               await supabase.from('join_requests').delete().eq('id', newReq.id);
+ 
+               // Update local pending lists + players
+               setPendingJoinRequests(prev => prev.filter((r: any) => r.id !== newReq.id));
+               setPendingJoinPlayerIds(prev => {
+                 const next = new Set(prev);
+                 next.delete(playerId);
+                 return next;
+               });
+               await loadPlayersFromJoinTable(table.id);
+             }
+           } catch (e) {
+             console.error('[PokerTable] auto-approve join_request handler error:', e);
+           }
+         }
+       )
+       .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [table?.id]);
 
   // New helper: load players for a table from table_players -> players
   const loadPlayersFromJoinTable = async (tableId: string) => {
     if (!tableId) return;
     try {
-      // Fetch join records (adjust column name user_id/player_id as applicable)
-      const { data: joinRows, error: joinError } = await supabase
-        .from('table_players')
-        .select('*')
-        .eq('table_id', tableId);
+       // Fetch join records (adjust column name user_id/player_id as applicable)
+       const { data: joinRows, error: joinError } = await supabase
+         .from('table_players')
+         .select('*')
+         .eq('table_id', tableId);
 
-      if (joinError) {
-        console.error('Error fetching table_players:', joinError);
-        setPlayers([]);
-        return;
-      }
+       if (joinError) {
+         // transient load failure: log but keep previous players to avoid flicker/clearing
+         console.error('Error fetching table_players (transient):', joinError);
+         return;
+       }
 
-      const ids = (joinRows || [])
-        .map((r: any) => r.user_id ?? r.player_id) // support both column names
-        .filter(Boolean);
+        // map player id -> status from joinRows
+        const statusById: Record<string, string> = {};
+        (joinRows || []).forEach((r: any) => {
+          const pid = r.user_id ?? r.player_id;
+          if (pid) statusById[pid] = r.status;
+        });
 
-      if (ids.length === 0) {
-        setPlayers([]);
-        return;
-      }
+        const ids = (joinRows || [])
+          .map((r: any) => r.user_id ?? r.player_id) // support both column names
+          .filter(Boolean);
 
-      const { data: playersData, error: playersError } = await supabase
-        .from('players')
-        .select('id,name')
-        .in('id', ids);
+        if (ids.length === 0) {
+          setPlayers([]);
+          return;
+        }
 
-      if (playersError) {
-        console.error('Error fetching players rows:', playersError);
-        setPlayers([]);
-        return;
-      }
+       const { data: playersData, error: playersError } = await supabase
+         .from('players')
+         .select('id,name')
+         .in('id', ids);
 
-      // Merge with totals if available
-      const newPlayers: TablePlayer[] = (playersData || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        totalPoints: playerTotals[p.id] ?? 0,
-        active: true
-      }));
+       if (playersError) {
+         console.error('Error fetching players rows (transient):', playersError);
+         return;
+       }
 
-      setPlayers(newPlayers);
-    } catch (e) {
-      console.error('loadPlayersFromJoinTable error', e);
-      setPlayers([]);
-    }
+        // Merge with totals if available
+      const newPlayers: TablePlayer[] = (playersData || []).map((p: any) => {
+        const status = statusById[p.id];
+        const isInactiveStatus = status === 'inactive';
+        const hasPending = pendingJoinPlayerIds.has(p.id); // use component state
+        // If DB shows active but there is a pending join_request, treat as pending (ignore active)
+        if ((status === 'active' || !status) && hasPending) {
+          console.warn('[PokerTable] Ignoring active table_players row for player awaiting approval:', p.id);
+        }
+        // A player is active only when DB status is not 'inactive' and they are not pending approval.
+        const active = !isInactiveStatus && !hasPending;
+        return {
+          id: p.id,
+          name: p.name,
+          totalPoints: playerTotals[p.id] ?? 0,
+          active,
+          pending: hasPending
+        };
+      });
+
+       setPlayers(newPlayers);
+     } catch (e) {
+       console.error('loadPlayersFromJoinTable unexpected error (keep previous players):', e);
+     }
   };
 
   // Fetch admin name when table changes
   useEffect(() => {
     const fetchAdminName = async () => {
       if (!table?.admin_player_id) return;
+      // use maybeSingle to avoid 406 when admin_player_id doesn't exist in players
       const { data: adminPlayer, error } = await supabase
-        .from('players') // <-- use 'players' table
+        .from('players')
         .select('name')
         .eq('id', table.admin_player_id)
-        .single();
+        .maybeSingle();
       if (!error && adminPlayer) {
         setAdminName(adminPlayer.name);
       }
@@ -200,11 +453,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
           if (localTable.id) await loadPlayersFromJoinTable(localTable.id);
           return;
         }
+        // use maybeSingle so absence of a row doesn't trigger a 406
         const { data, error } = await supabase
           .from('poker_tables')
           .select('*')
-          .eq('admin_player_id', profile.id) // or contains? keep original fallback
-          .single();
+          .eq('admin_player_id', profile.id)
+          .maybeSingle();
         if (!error && data) {
           setTable(data);
           await loadPlayersFromJoinTable(data.id);
@@ -338,41 +592,98 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       .on('broadcast', { event: 'join_request_created' }, async (payload) => {
         try {
           const reqId = payload?.payload?.requestId;
-          // If we already showed a notification for this request id, ignore duplicate
-          if (reqId && shownJoinRequestIdsRef.current.has(reqId)) {
-            return;
-          }
-          // Mark as shown to prevent duplicates (keeps in-memory dedupe only)
-          if (reqId) shownJoinRequestIdsRef.current.add(reqId);
+          const compositeKey = reqId && table?.id ? `${reqId}:${table.id}` : null;
+          // If we already showed a notification for this request+table, ignore duplicate
+          if (compositeKey && shownJoinRequestIdsRef.current.has(compositeKey)) return;
 
-          // Show toast once
-          toast('New join request', {
-            description: `${payload?.payload?.playerName || 'A player'} requested to join`,
-          });
+           // If we have a requestId, fetch the join_request row first to decide behavior
+           if (reqId) {
+             const { data: reqRow, error: reqRowErr } = await supabase
+               .from('join_requests')
+               .select('*')
+               .eq('id', reqId)
+               .maybeSingle();
+             // If row not found or error, ignore (it may have been auto-handled)
+             if (reqRowErr) {
+               console.warn('[PokerTable] join_request lookup failed for notif:', reqRowErr);
+             }
+            if (!reqRow) {
+              // already handled elsewhere (auto-approved), do not notify
+              return;
+            }
 
-          // Re-use the same enrichment logic as the initial fetch (refresh pendingJoinRequests)
-          const { data: reqs, error: reqErr } = await supabase
-            .from('join_requests')
-            .select('*')
-            .eq('table_id', table.id)
-            .eq('status', 'pending');
-          if (reqErr || !reqs) {
-            setPendingJoinRequests([]);
-            return;
+            // If the join_request is for a different table, ignore it here
+            if (reqRow.table_id && reqRow.table_id !== table.id) {
+              return;
+            }
+
+            const pid = reqRow.player_id;
+            // Check for prior membership: if player has any table_players row for this table,
+            // treat as returning player and auto-activate (no admin notification).
+            const { data: prior, error: priorErr } = await supabase
+              .from('table_players')
+              .select('*')
+              .eq('table_id', table.id)
+              .eq('player_id', pid)
+              .maybeSingle();
+            if (priorErr) {
+              console.warn('[PokerTable] Error checking prior membership:', priorErr);
+            }
+            if (prior) {
+              // Auto-activate returning player and remove join_request (no admin toast)
+              try {
+                await supabase
+                  .from('table_players')
+                  .upsert({ table_id: table.id, player_id: pid, status: 'active' }, { onConflict: 'table_id,player_id' });
+              } catch (e) {
+                console.warn('[PokerTable] Failed to upsert table_players for auto-activate:', e);
+              }
+              try {
+                await supabase.from('join_requests').delete().eq('id', reqId);
+              } catch (e) {
+                console.warn('[PokerTable] Failed to delete join_request during auto-approve:', e);
+              }
+              // refresh local pending and players
+              setPendingJoinRequests(prev => prev.filter((r: any) => r.id !== reqId));
+              setPendingJoinPlayerIds(prev => {
+                const next = new Set(prev);
+                next.delete(pid);
+                return next;
+              });
+              await loadPlayersFromJoinTable(table.id);
+              return;
+            }
+            // mark shown to dedupe further broadcasts for this table
+            if (compositeKey) shownJoinRequestIdsRef.current.add(compositeKey);
           }
-          const playerIds = Array.from(new Set(reqs.map((r: any) => r.player_id).filter(Boolean)));
-          const { data: playersData } = await supabase
-            .from('players')
-            .select('id,name')
-            .in('id', playerIds);
-          const nameById: Record<string, string> = {};
-          (playersData || []).forEach((p: any) => { nameById[p.id] = p.name; });
-          const enriched = reqs.map((r: any) => ({ ...r, player_name: nameById[r.player_id] || undefined }));
-          setPendingJoinRequests(enriched);
-        } catch (e) {
-          console.error('Error handling join_request_created broadcast', e);
-        }
-      })
+ 
+           // fallback: show toast and refresh pending join requests (existing behavior)
+           toast('New join request', {
+             description: `${payload?.payload?.playerName || 'A player'} requested to join`,
+           });
+ 
+           const { data: reqs, error: reqErr } = await supabase
+             .from('join_requests')
+             .select('*')
+             .eq('table_id', table.id)
+             .eq('status', 'pending');
+           if (reqErr || !reqs) {
+             setPendingJoinRequests([]);
+             return;
+           }
+           const playerIds = Array.from(new Set(reqs.map((r: any) => r.player_id).filter(Boolean)));
+           const { data: playersData } = await supabase
+             .from('players')
+             .select('id,name')
+             .in('id', playerIds);
+           const nameById: Record<string, string> = {};
+           (playersData || []).forEach((p: any) => { nameById[p.id] = p.name; });
+           const enriched = reqs.map((r: any) => ({ ...r, player_name: nameById[r.player_id] || undefined }));
+           setPendingJoinRequests(enriched);
+         } catch (e) {
+           console.error('Error handling join_request_created broadcast', e);
+         }
+       })
        .subscribe();
 
     return () => {
@@ -581,8 +892,14 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       } else {
         // Immediately remove from local pending list so UI updates without waiting for realtime fetch
         setPendingJoinRequests(prev => prev.filter((r: any) => r.id !== reqId));
+        // Also remove the player id from the pendingJoinPlayerIds set so loadPlayersFromJoinTable will mark them active
+        setPendingJoinPlayerIds(prev => {
+          const next = new Set(prev);
+          next.delete(playerProfile.id);
+          return next;
+        });
       }
-      // reload players from join table
+      // reload players from join table (now pendingJoinPlayerIds updated)
       await loadPlayersFromJoinTable(table.id);
 
       // notify the joining player
@@ -604,8 +921,19 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     
     try {
       // Reject: simply remove the join request
+      // fetch req to know player_id so we can clear pendingJoinPlayerIds
+      const { data: reqRow } = await supabase.from('join_requests').select('player_id').eq('id', reqId).maybeSingle();
       await supabase.from('join_requests').delete().eq('id', reqId);
-      setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
+      setPendingJoinRequests(prev => prev.filter(r => r.id !== reqId));
+      if (reqRow?.player_id) {
+        setPendingJoinPlayerIds(prev => {
+          const next = new Set(prev);
+          next.delete(reqRow.player_id);
+          return next;
+        });
+        // reload players so UI updates
+        await loadPlayersFromJoinTable(table.id);
+      }
     } finally {
       setProcessingJoinRequests(prev => prev.filter(id => id !== reqId));
     }
@@ -699,10 +1027,9 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
 
   // Guard: If table is null, navigate away and do not render PokerTable UI
   if (!table) {
-    // Optionally, you can use useEffect to navigate if table becomes null
-    useEffect(() => {
-      navigate('/table-selection'); // <-- Change this route if needed
-    }, []);
+    // When table is temporarily null (e.g. storage restored), do not force a redirect here.
+    // handleExitGame already performs navigation on explicit exit.
+    console.log('[PokerTable] table is null — waiting for app state to resolve.');
     return null;
   }
 
@@ -719,10 +1046,26 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     if (!table || !profile) return;
     setProcessingExit(true);
 
-    // Mark player as inactive in table_players
-    await supabase
-      .from('table_players')
-      .upsert({ table_id: table.id, player_id: profile.id, status: 'inactive' });
+    // Mark player as inactive in table_players (use onConflict and fallback to update)
+    try {
+      const upsertPayload = [{ table_id: table.id, player_id: profile.id, status: 'inactive' }];
+      const { error: upsertErr } = await supabase
+        .from('table_players')
+        .upsert(upsertPayload, { onConflict: 'table_id,player_id' });
+
+      if (upsertErr) {
+        console.warn('[PokerTable] table_players upsert error, attempting update:', upsertErr);
+        const { error: updateErr } = await supabase
+          .from('table_players')
+          .update({ status: 'inactive' })
+          .match({ table_id: table.id, player_id: profile.id });
+        if (updateErr) {
+          console.warn('[PokerTable] table_players update also failed (ignored):', updateErr);
+        }
+      }
+    } catch (e) {
+      console.warn('[PokerTable] Unexpected error updating table_players (ignored):', e);
+    }
 
     // If the exiting player is admin, transfer admin role
     if (isAdmin) {
@@ -753,9 +1096,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     // Refresh players list
     await loadPlayersFromJoinTable(table.id);
 
-    storage.setTable(null);
-    navigate('/table-selection');
-    setTable(null);
+    // Clear persisted table immediately so selection shows no active table,
+    // then force a full navigation to the selection route to avoid router/state races.
+    try { storage.setTable(null); } catch (e) { console.warn('[PokerTable] storage.setTable failed:', e); }
+    // Use a hard replace to ensure the app loads the selection page (avoids staying on the same component)
+    window.location.replace('/');
+    // fallback local cleanup (component will unload on navigation)
     setProcessingExit(false);
     setOpenExit(false);
   };
@@ -1106,20 +1452,29 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Always show all players, regardless of active status */}
-              {players.map((p: any) => (
-                <TableRow key={p.id} className={p.active === false ? 'opacity-50' : ''}>
-                  <TableCell>
-                    {p.name}
-                    {p.active === false && (
-                      <span style={{ color: 'red', marginLeft: 6, fontSize: 12 }}>(Exited)</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {parseInt(String(p.totalPoints ?? 0), 10)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {/* Always show all players, regardless of active status.
+                  - Dim only real 'inactive' players (status === 'inactive').
+                  - Show '(Pending)' for players waiting admin approval (do not show red 'Exited'). */}
+              {players.map((p: any) => {
+                const isPending = !!p.pending;
+                const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
+                return (
+                  <TableRow key={p.id} className={isInactive ? 'opacity-50' : ''}>
+                    <TableCell>
+                      {p.name}
+                      {isPending && (
+                        <span style={{ color: '#666', marginLeft: 6, fontSize: 12 }}>(Pending)</span>
+                      )}
+                      {isInactive && (
+                        <span style={{ color: 'red', marginLeft: 6, fontSize: 12 }}>(Exited)</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {parseInt(String(p.totalPoints ?? 0), 10)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </UITable>
 
@@ -1141,12 +1496,9 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
               </DialogHeader>
               <div className="space-y-2 text-sm">
                 <p>
-                  Are you sure you want to exit this game? <br />
-                  <strong>
-                    You will be removed from the table, but your buy-ins, buy-in requests, and end-up values for this table will be preserved for history.
-                  </strong> <br />
-                  You can join another table and your points will not be combined across tables.
+                  You will be moved to the table selection page.
                 </p>
+                <p className="text-muted-foreground text-sm">Click Yes to continue.</p>
               </div>
               <DialogFooter>
                 <Button
@@ -1158,7 +1510,11 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 </Button>
                 <Button
                   variant="destructive"
-                  onClick={handleExitGame}
+                  onClick={async () => {
+                    // close dialog immediately and run exit flow (DB work + navigate + clear)
+                    setOpenExit(false);
+                    await handleExitGame();
+                  }}
                   disabled={processingExit}
                 >
                   Yes, Exit Table
@@ -1223,5 +1579,17 @@ export default PokerTable;
     buy_in_requests
 
   The approved points information is maintained in the table:
+    buy_ins
+  The request for a buy-in that is not approved yet is maintained in the table:
+    buy_in_requests
+
+  The approved points information is maintained in the table:
+    buy_ins
+  The approved points information is maintained in the table:
+    buy_ins
+  The approved points information is maintained in the table:
+    buy_ins
+  The approved points information is maintained in the table:
+    buy_ins
     buy_ins
 */
