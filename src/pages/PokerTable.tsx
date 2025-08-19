@@ -49,10 +49,82 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [historyData, setHistoryData] = useState<any[]>([]); // Store buy-in history
   const [endUpValues, setEndUpValues] = useState<Record<string, number>>({}); // Store end up values per player
   const [processingRequests, setProcessingRequests] = useState<string[]>([]);
+  const [processingJoinRequests, setProcessingJoinRequests] = useState<string[]>([]);
   const [processingExit, setProcessingExit] = useState(false);
+  const [adminName, setAdminName] = useState<string>('');
+
+  // Fetch admin name when table changes
+  useEffect(() => {
+    const fetchAdminName = async () => {
+      if (!table?.admin_user_id) return;
+      
+      const { data: adminUser, error } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', table.admin_user_id)
+        .single();
+        
+      if (!error && adminUser) {
+        setAdminName(adminUser.name);
+      }
+    };
+    
+    fetchAdminName();
+  }, [table?.admin_user_id]);
 
   // Move isAdmin definition before useEffect
-  const isAdmin = profile?.id === table?.adminId || profile?.id === table?.admin_user_id;
+  const isAdmin = profile?.id === table?.admin_user_id;
+
+  // Add real-time subscription for table changes (admin changes, join code, name, etc.)
+  useEffect(() => {
+    if (!table) return;
+
+    const tableChannel = supabase
+      .channel('table_changes_' + table.id)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'poker_tables',
+          filter: `id=eq.${table.id}`
+        },
+        payload => {
+          console.log('Table updated:', payload);
+          // Update the local table state with new data
+          setTable((prev: any) => ({
+            ...prev,
+            ...payload.new,
+            players: payload.new.players || prev.players
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(tableChannel);
+    };
+  }, [table]);
+
+  // On page refresh, fetch latest table data
+  useEffect(() => {
+    const fetchLatestTableData = async () => {
+      if (!table?.id) return;
+      
+      const { data: tableData, error } = await supabase
+        .from('poker_tables')
+        .select('*')
+        .eq('id', table.id)
+        .single();
+      
+      if (!error && tableData) {
+        setTable(tableData);
+        storage.setTable(tableData);
+      }
+    };
+    
+    fetchLatestTableData();
+  }, []);
 
   // Do not fetch table if propTable is present
   useEffect(() => {
@@ -320,101 +392,106 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
 
   const handleApproveJoin = async (reqId: string) => {
     console.log('[PokerTable] handleApproveJoin called for reqId:', reqId);
+    
+    if (processingJoinRequests.includes(reqId)) return;
+    setProcessingJoinRequests(prev => [...prev, reqId]);
+    
+    try {
+      // Find the join request
+      const { data: req, error } = await supabase
+        .from('join_requests')
+        .select('*')
+        .eq('id', reqId)
+        .single();
+      console.log('[PokerTable] join_request fetched:', req, 'error:', error);
+      if (error || !req) return;
 
-    // Find the join request
-    const { data: req, error } = await supabase
-      .from('join_requests')
-      .select('*')
-      .eq('id', reqId)
-      .single();
-    console.log('[PokerTable] join_request fetched:', req, 'error:', error);
-    if (error || !req) return;
+      // Fetch the joining user's profile for correct name
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('id', req.player_id)
+        .single();
+      console.log('[PokerTable] userProfile fetched:', userProfile, 'error:', userError);
+      if (userError || !userProfile) return;
 
-    // Fetch the joining user's profile for correct name
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('id, name')
-      .eq('id', req.player_id)
-      .single();
-    console.log('[PokerTable] userProfile fetched:', userProfile, 'error:', userError);
-    if (userError || !userProfile) return;
+      // Check if player is already in the table (avoid duplicates)
+      const playerIndex = table.players.findIndex((p: any) => p.id === userProfile.id);
+      if (playerIndex !== -1) {
+        // If player exists and is inactive, reactivate them
+        const updatedPlayers = table.players.map((p: any, idx: number) =>
+          idx === playerIndex ? { ...p, active: true } : p
+        );
+        await supabase
+          .from('poker_tables')
+          .update({ players: updatedPlayers })
+          .eq('id', table.id);
 
-    // Check if player is already in the table (avoid duplicates)
-    const playerIndex = table.players.findIndex((p: any) => p.id === userProfile.id);
-    if (playerIndex !== -1) {
-      // If player exists and is inactive, reactivate them
-      const updatedPlayers = table.players.map((p: any, idx: number) =>
-        idx === playerIndex ? { ...p, active: true } : p
-      );
-      await supabase
+        // Remove the join request
+        await supabase.from('join_requests').delete().eq('id', reqId);
+        setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
+        setTable({ ...table, players: updatedPlayers });
+        return;
+      }
+
+      // --- Add the joining player to the table's players array ---
+      const updatedPlayers = [
+        ...table.players,
+        { id: userProfile.id, name: userProfile.name, totalPoints: 0, active: true }
+      ];
+      console.log('[PokerTable] Updating poker_tables row with new players array:', updatedPlayers);
+
+      const { error: updateError } = await supabase
         .from('poker_tables')
         .update({ players: updatedPlayers })
         .eq('id', table.id);
 
+      if (updateError) {
+        console.error('[PokerTable] Error updating poker_tables row:', updateError);
+      } else {
+        console.log('[PokerTable] poker_tables row updated successfully.');
+      }
+
       // Remove the join request
-      await supabase.from('join_requests').delete().eq('id', reqId);
+      const { error: deleteError } = await supabase.from('join_requests').delete().eq('id', reqId);
+      if (deleteError) {
+        console.error('[PokerTable] Error deleting join_request:', deleteError);
+      } else {
+        console.log('[PokerTable] join_request deleted successfully.');
+      }
       setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
+
+      // Refresh table state
       setTable({ ...table, players: updatedPlayers });
-      return;
-    }
+      console.log('[PokerTable] setTable called with updated players:', updatedPlayers);
 
-    // --- Add the joining player to the table's players array ---
-    const updatedPlayers = [
-      ...table.players,
-      { id: userProfile.id, name: userProfile.name, totalPoints: 0 }
-    ];
-    console.log('[PokerTable] Updating poker_tables row with new players array:', updatedPlayers);
+      // --- Notify the joining player (client) ---
+      console.log('[PokerTable] Notifying player about successful join');
 
-    const { error: updateError } = await supabase
-      .from('poker_tables')
-      .update({ players: updatedPlayers })
-      .eq('id', table.id);
-
-    if (updateError) {
-      console.error('[PokerTable] Error updating poker_tables row:', updateError);
-    } else {
-      console.log('[PokerTable] poker_tables row updated successfully.');
-    }
-
-    // Remove the join request
-    const { error: deleteError } = await supabase.from('join_requests').delete().eq('id', reqId);
-    if (deleteError) {
-      console.error('[PokerTable] Error deleting join_request:', deleteError);
-    } else {
-      console.log('[PokerTable] join_request deleted successfully.');
-    }
-    setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
-
-    // Refresh table state
-    setTable({ ...table, players: updatedPlayers });
-    console.log('[PokerTable] setTable called with updated players:', updatedPlayers);
-
-    // --- Notify the joining player (client) ---
-    console.log('[PokerTable] Notifying player about successful join');
-
-    // After successful approval and table update:
-    // Send a broadcast event to notify the joining user
-    const { data: reqData } = await supabase
-      .from('join_requests')
-      .select('*')
-      .eq('id', reqId)
-      .single();
-
-    if (reqData && reqData.player_id) {
+      // Send a broadcast event to notify the joining user
       supabase
-        .channel('user_' + reqData.player_id)
+        .channel('user_' + req.player_id)
         .send({
           type: 'broadcast',
           event: 'join_approved',
           payload: { tableId: table.id }
         });
+    } finally {
+      setProcessingJoinRequests(prev => prev.filter(id => id !== reqId));
     }
   };
 
   const handleRejectJoin = async (reqId: string) => {
-    // Reject: simply remove the join request
-    await supabase.from('join_requests').delete().eq('id', reqId);
-    setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
+    if (processingJoinRequests.includes(reqId)) return;
+    setProcessingJoinRequests(prev => [...prev, reqId]);
+    
+    try {
+      // Reject: simply remove the join request
+      await supabase.from('join_requests').delete().eq('id', reqId);
+      setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
+    } finally {
+      setProcessingJoinRequests(prev => prev.filter(id => id !== reqId));
+    }
   };
 
   // Fetch buy-in history for all players when history dialog is opened
@@ -568,8 +645,8 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
             Poker Table: {table.name || table.joinCode}
           </CardTitle>
           <CardDescription>
-            Join Code: {table.joinCode} <br />
-            Admin: {table.adminName || 'Unknown'}
+            Join Code: {table.join_code || table.joinCode} <br />
+            Admin: {adminName || 'Loading...'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -854,8 +931,21 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => handleApproveJoin(r.id)}>Approve</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleRejectJoin(r.id)}>Reject</Button>
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleApproveJoin(r.id)}
+                            disabled={processingJoinRequests.includes(r.id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => handleRejectJoin(r.id)}
+                            disabled={processingJoinRequests.includes(r.id)}
+                          >
+                            Reject
+                          </Button>
                         </div>
                       </div>
                     );
@@ -919,7 +1009,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 disabled={processingExit}
               >
                 <span role="img" aria-label="exit">🚪</span>
-                Exit Game
+                Back to Table Selection
               </Button>
             </DialogTrigger>
             <DialogContent>

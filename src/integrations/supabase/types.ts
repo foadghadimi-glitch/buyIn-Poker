@@ -139,6 +139,7 @@ export type Database = {
           is_anonymous: boolean | null
           join_code: number
           name: string | null
+          original_admin_id: string | null
           players: Json | null
           status: string
         }
@@ -149,6 +150,7 @@ export type Database = {
           is_anonymous?: boolean | null
           join_code: number
           name?: string | null
+          original_admin_id?: string | null
           players?: Json | null
           status?: string
         }
@@ -159,6 +161,7 @@ export type Database = {
           is_anonymous?: boolean | null
           join_code?: number
           name?: string | null
+          original_admin_id?: string | null
           players?: Json | null
           status?: string
         }
