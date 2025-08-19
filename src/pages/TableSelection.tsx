@@ -82,12 +82,12 @@ const TableSelection = ({
     const newTable = {
       id: tableId,
       join_code,
-      admin_user_id: profile.id, // Use profile ID
-      original_admin_id: profile.id, // Track original admin
+      admin_player_id: profile.id, // use admin_player_id
       status: 'active',
-      players: [{ id: profile.id, name: profile.name, totalPoints: 0 }],
       name: finalTableName
+      // DO NOT include 'players' column here (schema doesn't have it)
     };
+
     const { data, error: insertError } = await supabase
       .from('poker_tables')
       .insert(newTable)
@@ -96,11 +96,15 @@ const TableSelection = ({
       alert(`Failed to create table. Error: ${insertError?.message || 'Unknown error'}`);
       return;
     }
+
+    // insert admin into table_players join table using player_id (not user_id)
+    await supabase
+      .from('table_players')
+      .insert({ table_id: data[0].id, player_id: profile.id, status: 'active' });
+
     storage.setTable(data[0]);
     // Only call the callback to move to the next page
-    if (typeof onCreateTable === 'function') {
-      onCreateTable(data[0]);
-    }
+    if (typeof onCreateTable === 'function') onCreateTable(data[0]);
   };
 
   const handleJoinTable = async () => {
@@ -125,38 +129,15 @@ const TableSelection = ({
       return;
     }
 
-    // Check if this player is the original admin - they can rejoin directly
-    if (tableData.original_admin_id === profile.id) {
-      // Update existing player record or add back to players array
-      const updatedPlayers = (tableData.players as any[]) || [];
-      const existingPlayerIndex = updatedPlayers.findIndex((p: any) => p.id === profile.id);
-      
-      if (existingPlayerIndex >= 0) {
-        // Player exists, set them as active
-        updatedPlayers[existingPlayerIndex].active = true;
-      } else {
-        // Add player back to the table
-        updatedPlayers.push({ id: profile.id, name: profile.name, totalPoints: 0, active: true });
-      }
-
-      await supabase
-        .from('poker_tables')
-        .update({ players: updatedPlayers })
-        .eq('id', tableData.id);
-
-      // Add to table_players if not exists
+    // Check if this player is the admin
+    if (tableData.admin_player_id === profile.id) {
+      // mark admin as active in table_players (or upsert)
       await supabase
         .from('table_players')
-        .upsert({ 
-          table_id: tableData.id, 
-          user_id: profile.id, 
-          status: 'active' 
-        });
+        .upsert({ table_id: tableData.id, player_id: profile.id, status: 'active' });
 
-      storage.setTable({ ...tableData, players: updatedPlayers });
-      if (typeof onJoinTable === 'function') {
-        onJoinTable({ ...tableData, players: updatedPlayers });
-      }
+      storage.setTable({ ...tableData });
+      if (typeof onJoinTable === 'function') onJoinTable({ ...tableData });
       return;
     }
 
@@ -173,33 +154,34 @@ const TableSelection = ({
       return;
     }
 
-    // Add join request to the database, including player_name
+    // Add join request to the database
     const joinReq = {
       id: uuidv4(),
       table_id: tableData.id,
       player_id: profile.id,
-      player_name: profile.name,
       status: 'pending'
     };
-    const { error: joinError } = await supabase.from('join_requests').insert([joinReq]);
+    // Insert and request the inserted row back so we have the join request id
+    const { data: insertedReq, error: joinError } = await supabase
+      .from('join_requests')
+      .insert([joinReq])
+      .select('id');
+    const insertedId = Array.isArray(insertedReq) && insertedReq[0]?.id ? insertedReq[0].id : joinReq.id;
     if (joinError) {
       alert('Failed to create join request. ' + (joinError.message || ''));
       return;
     }
 
-    // Notify admin in realtime about the new join request
+    // Notify admin using admin_player_id and include the join request id so admin can dedupe
     await supabase
-      .channel('user_' + tableData.admin_user_id)
+      .channel('user_' + tableData.admin_player_id)
       .send({
         type: 'broadcast',
         event: 'join_request_created',
-        payload: { tableId: tableData.id, playerId: profile.id, playerName: profile.name }
+        payload: { tableId: tableData.id, playerId: profile.id, playerName: profile.name, requestId: insertedId }
       });
 
-    // Just call onJoinTable to trigger waitingApproval UI
-    if (typeof onJoinTable === 'function') {
-      onJoinTable(tableData);
-    }
+    if (typeof onJoinTable === 'function') onJoinTable(tableData);
   };
 
   return (
