@@ -26,7 +26,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string | null
-          id: string
+          id?: string
           player_id: string
           status?: string
           table_id: string
@@ -41,13 +41,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "buy_in_requests_player_id_fkey"
-            columns: ["player_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "buy_in_requests_table_id_fkey"
             columns: ["table_id"]
             isOneToOne: false
@@ -58,56 +51,42 @@ export type Database = {
       }
       buy_ins: {
         Row: {
-          admin_id: string
+          admin_id: string | null
           amount: number
-          created_at: string
+          created_at: string | null
           id: string
           notes: string | null
           player_id: string
           status: string
           table_id: string
-          timestamp: string
-          updated_at: string
+          timestamp: string | null
+          updated_at: string | null
         }
         Insert: {
-          admin_id: string
+          admin_id?: string | null
           amount: number
-          created_at?: string
+          created_at?: string | null
           id?: string
           notes?: string | null
           player_id: string
           status?: string
           table_id: string
-          timestamp?: string
-          updated_at?: string
+          timestamp?: string | null
+          updated_at?: string | null
         }
         Update: {
-          admin_id?: string
+          admin_id?: string | null
           amount?: number
-          created_at?: string
+          created_at?: string | null
           id?: string
           notes?: string | null
           player_id?: string
           status?: string
           table_id?: string
-          timestamp?: string
-          updated_at?: string
+          timestamp?: string | null
+          updated_at?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "buy_ins_admin_id_fkey"
-            columns: ["admin_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "buy_ins_player_id_fkey"
-            columns: ["player_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "buy_ins_table_id_fkey"
             columns: ["table_id"]
@@ -128,7 +107,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          id: string
+          id?: string
           player_id: string
           player_name?: string | null
           status?: string
@@ -144,13 +123,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "join_requests_player_id_fkey"
-            columns: ["player_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "join_requests_table_id_fkey"
             columns: ["table_id"]
             isOneToOne: false
@@ -161,27 +133,33 @@ export type Database = {
       }
       poker_tables: {
         Row: {
-          admin_user_id: string
+          admin_user_id: string | null
+          created_at: string | null
           id: string
+          is_anonymous: boolean | null
           join_code: number
           name: string | null
-          players: Json
+          players: Json | null
           status: string
         }
         Insert: {
-          admin_user_id: string
-          id: string
+          admin_user_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_anonymous?: boolean | null
           join_code: number
           name?: string | null
-          players: Json
+          players?: Json | null
           status?: string
         }
         Update: {
-          admin_user_id?: string
+          admin_user_id?: string | null
+          created_at?: string | null
           id?: string
+          is_anonymous?: boolean | null
           join_code?: number
           name?: string | null
-          players?: Json
+          players?: Json | null
           status?: string
         }
         Relationships: []
@@ -192,32 +170,57 @@ export type Database = {
           id: string
           player_id: string
           table_id: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
           endup?: number
           id?: string
           player_id: string
           table_id: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
           endup?: number
           id?: string
           player_id?: string
           table_id?: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "table_endups_player_id_fkey"
-            columns: ["player_id"]
+            foreignKeyName: "table_endups_table_id_fkey"
+            columns: ["table_id"]
             isOneToOne: false
-            referencedRelation: "users"
+            referencedRelation: "poker_tables"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      table_players: {
+        Row: {
+          created_at: string | null
+          id: string
+          status: string
+          table_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          status?: string
+          table_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          status?: string
+          table_id?: string
+          user_id?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: "table_endups_table_id_fkey"
+            foreignKeyName: "table_players_table_id_fkey"
             columns: ["table_id"]
             isOneToOne: false
             referencedRelation: "poker_tables"
@@ -248,7 +251,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_anonymous_table: {
+        Args: { table_name: string }
+        Returns: string
+      }
     }
     Enums: {
       buy_in_request_status: "pending" | "approved" | "rejected"
