@@ -22,15 +22,15 @@ const Onboarding = (props: { onSetProfile?: (profile: any) => void }) => {
     if (!name.trim()) return;
     let finalName = name.trim();
 
-    // Check for existing names in the users table
-    const { data: existingUsers, error } = await supabase
-      .from('users')
+    // Check for existing names in the players table
+    const { data: existingPlayers, error } = await supabase
+      .from('players') // <-- changed from 'users'
       .select('name')
       .ilike('name', `${finalName}%`);
 
-    if (!error && existingUsers) {
-      // Count how many users have the same base name or base name with _number
-      const sameBase = existingUsers.filter((u: { name: string }) =>
+    if (!error && existingPlayers) {
+      // Count how many players have the same base name or base name with _number
+      const sameBase = existingPlayers.filter((u: { name: string }) =>
         u.name === finalName || u.name.startsWith(`${finalName}_`)
       );
       if (sameBase.length > 0) {
@@ -45,8 +45,8 @@ const Onboarding = (props: { onSetProfile?: (profile: any) => void }) => {
       avatar: null,
     };
 
-    // Save to 'users' table in the database and check for errors
-    const { error: insertError } = await supabase.from('users').insert(profile);
+    // Save to 'players' table in the database and check for errors
+    const { error: insertError } = await supabase.from('players').insert(profile); // <-- changed from 'users'
     if (insertError) {
       alert(`Failed to save profile. Error: ${insertError.message || 'Unknown error'}`);
       return;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { storage } from '@/utils/storage';
@@ -12,16 +12,16 @@ import { Input } from '@/components/ui/input';
 import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogHeader as HistoryDialogHeader, DialogTitle as HistoryDialogTitle, DialogFooter as HistoryDialogFooter, DialogTrigger as HistoryDialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
-// Define the type for a player
+// Update types to match new schema
 type TablePlayer = {
-  id: string;
+  id: string; // now references players.id
   name: string;
   totalPoints?: number;
+  active?: boolean;
 };
 
-// Extend the poker_tables row type to include 'players'
 type PokerTableRow = {
-  admin_user_id?: string;
+  admin_player_id?: string; // changed from admin_user_id
   created_at?: string;
   id?: string;
   join_code?: string;
@@ -53,27 +53,81 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   const [processingExit, setProcessingExit] = useState(false);
   const [adminName, setAdminName] = useState<string>('');
 
+  // Add new state to hold players loaded from table_players + players table
+  const [players, setPlayers] = useState<TablePlayer[]>(table?.players || []);
+
+  // Track join-request IDs we've already shown notifications for to avoid duplicates
+  const shownJoinRequestIdsRef = useRef<Set<string>>(new Set());
+
+  // New helper: load players for a table from table_players -> players
+  const loadPlayersFromJoinTable = async (tableId: string) => {
+    if (!tableId) return;
+    try {
+      // Fetch join records (adjust column name user_id/player_id as applicable)
+      const { data: joinRows, error: joinError } = await supabase
+        .from('table_players')
+        .select('*')
+        .eq('table_id', tableId);
+
+      if (joinError) {
+        console.error('Error fetching table_players:', joinError);
+        setPlayers([]);
+        return;
+      }
+
+      const ids = (joinRows || [])
+        .map((r: any) => r.user_id ?? r.player_id) // support both column names
+        .filter(Boolean);
+
+      if (ids.length === 0) {
+        setPlayers([]);
+        return;
+      }
+
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('id,name')
+        .in('id', ids);
+
+      if (playersError) {
+        console.error('Error fetching players rows:', playersError);
+        setPlayers([]);
+        return;
+      }
+
+      // Merge with totals if available
+      const newPlayers: TablePlayer[] = (playersData || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        totalPoints: playerTotals[p.id] ?? 0,
+        active: true
+      }));
+
+      setPlayers(newPlayers);
+    } catch (e) {
+      console.error('loadPlayersFromJoinTable error', e);
+      setPlayers([]);
+    }
+  };
+
   // Fetch admin name when table changes
   useEffect(() => {
     const fetchAdminName = async () => {
-      if (!table?.admin_user_id) return;
-      
-      const { data: adminUser, error } = await supabase
-        .from('users')
+      if (!table?.admin_player_id) return;
+      const { data: adminPlayer, error } = await supabase
+        .from('players') // <-- use 'players' table
         .select('name')
-        .eq('id', table.admin_user_id)
+        .eq('id', table.admin_player_id)
         .single();
-        
-      if (!error && adminUser) {
-        setAdminName(adminUser.name);
+      if (!error && adminPlayer) {
+        setAdminName(adminPlayer.name);
       }
     };
-    
     fetchAdminName();
-  }, [table?.admin_user_id]);
+  }, [table?.admin_player_id]);
 
   // Move isAdmin definition before useEffect
-  const isAdmin = profile?.id === table?.admin_user_id;
+  const isAdmin = profile?.id === table?.admin_player_id;
 
   // Add real-time subscription for table changes (admin changes, join code, name, etc.)
   useEffect(() => {
@@ -89,14 +143,20 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
           table: 'poker_tables',
           filter: `id=eq.${table.id}`
         },
-        payload => {
+        async payload => {
           console.log('Table updated:', payload);
           // Update the local table state with new data
           setTable((prev: any) => ({
             ...prev,
-            ...payload.new,
-            players: payload.new.players || prev.players
+            ...payload.new
+            // do not rely on payload.new.players (schema may not have it)
           }));
+          // Refresh players from join table when table changes
+          try {
+            await loadPlayersFromJoinTable(payload.new?.id || table.id);
+          } catch (e) {
+            console.error('Error reloading players after table change', e);
+          }
         }
       )
       .subscribe();
@@ -110,19 +170,21 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   useEffect(() => {
     const fetchLatestTableData = async () => {
       if (!table?.id) return;
-      
+
       const { data: tableData, error } = await supabase
         .from('poker_tables')
         .select('*')
         .eq('id', table.id)
         .single();
-      
+
       if (!error && tableData) {
         setTable(tableData);
         storage.setTable(tableData);
+        // load players separately from join table
+        await loadPlayersFromJoinTable(tableData.id);
       }
     };
-    
+
     fetchLatestTableData();
   }, []);
 
@@ -130,21 +192,23 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   useEffect(() => {
     console.log('[PokerTable] useEffect - table:', table, 'profile:', profile);
     if (!table && profile) {
-      // Fetch the current table for the user
       const fetchTable = async () => {
-        // Try to get the table from local storage first
         const localTable = storage.getTable();
         if (localTable) {
           setTable(localTable);
+          // try loading players for the stored table
+          if (localTable.id) await loadPlayersFromJoinTable(localTable.id);
           return;
         }
-        // Fallback: Find the table where the user is in the players array
         const { data, error } = await supabase
           .from('poker_tables')
           .select('*')
-          .contains('players', [{ id: profile.id }])
+          .eq('admin_player_id', profile.id) // or contains? keep original fallback
           .single();
-        if (!error && data) setTable(data);
+        if (!error && data) {
+          setTable(data);
+          await loadPlayersFromJoinTable(data.id);
+        }
       };
       fetchTable();
     }
@@ -178,6 +242,8 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
           totals[row.player_id] = (totals[row.player_id] || 0) + Number(row.amount);
         });
         setPlayerTotals(totals);
+        // Refresh players to include latest totals
+        setPlayers(prev => prev.map(p => ({ ...p, totalPoints: totals[p.id] ?? 0 })));
       }
     };
     fetchTotals();
@@ -187,14 +253,30 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
   useEffect(() => {
     if (!table || !isAdmin) return;
 
-    // Initial fetch
+    // Initial fetch + enrich with player names from players table
     const fetchJoinRequests = async () => {
-      const { data, error } = await supabase
+      const { data: reqs, error: reqErr } = await supabase
         .from('join_requests')
         .select('*')
         .eq('table_id', table.id)
         .eq('status', 'pending');
-      if (!error && data) setPendingJoinRequests(data);
+      if (reqErr || !reqs) {
+        setPendingJoinRequests([]);
+        return;
+      }
+      const playerIds = Array.from(new Set(reqs.map((r: any) => r.player_id).filter(Boolean)));
+      if (playerIds.length === 0) {
+        setPendingJoinRequests(reqs);
+        return;
+      }
+      const { data: playersData } = await supabase
+        .from('players')
+        .select('id,name')
+        .in('id', playerIds);
+      const nameById: Record<string, string> = {};
+      (playersData || []).forEach((p: any) => { nameById[p.id] = p.name; });
+      const enriched = reqs.map((r: any) => ({ ...r, player_name: nameById[r.player_id] || undefined }));
+      setPendingJoinRequests(enriched);
     };
     fetchJoinRequests();
 
@@ -255,20 +337,43 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       .channel('user_' + profile.id)
       .on('broadcast', { event: 'join_request_created' }, async (payload) => {
         try {
+          const reqId = payload?.payload?.requestId;
+          // If we already showed a notification for this request id, ignore duplicate
+          if (reqId && shownJoinRequestIdsRef.current.has(reqId)) {
+            return;
+          }
+          // Mark as shown to prevent duplicates (keeps in-memory dedupe only)
+          if (reqId) shownJoinRequestIdsRef.current.add(reqId);
+
+          // Show toast once
           toast('New join request', {
             description: `${payload?.payload?.playerName || 'A player'} requested to join`,
           });
-          const { data, error } = await (supabase as any)
+
+          // Re-use the same enrichment logic as the initial fetch (refresh pendingJoinRequests)
+          const { data: reqs, error: reqErr } = await supabase
             .from('join_requests')
             .select('*')
             .eq('table_id', table.id)
             .eq('status', 'pending');
-          if (!error && data) setPendingJoinRequests(data);
+          if (reqErr || !reqs) {
+            setPendingJoinRequests([]);
+            return;
+          }
+          const playerIds = Array.from(new Set(reqs.map((r: any) => r.player_id).filter(Boolean)));
+          const { data: playersData } = await supabase
+            .from('players')
+            .select('id,name')
+            .in('id', playerIds);
+          const nameById: Record<string, string> = {};
+          (playersData || []).forEach((p: any) => { nameById[p.id] = p.name; });
+          const enriched = reqs.map((r: any) => ({ ...r, player_name: nameById[r.player_id] || undefined }));
+          setPendingJoinRequests(enriched);
         } catch (e) {
           console.error('Error handling join_request_created broadcast', e);
         }
       })
-      .subscribe();
+       .subscribe();
 
     return () => {
       supabase.removeChannel(notifChannel);
@@ -290,7 +395,6 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
           filter: `table_id=eq.${table.id}`
         },
         payload => {
-          // Refetch totals when buy_ins change
           const fetchTotals = async () => {
             const { data, error } = await supabase
               .from('buy_ins')
@@ -302,23 +406,8 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 totals[row.player_id] = (totals[row.player_id] || 0) + Number(row.amount);
               });
               setPlayerTotals(totals);
-
-              // Always use the latest players array from the DB, do not filter out inactive players
-              const { data: tableData } = await supabase
-                .from('poker_tables')
-                .select('players')
-                .eq('id', table.id)
-                .single();
-
-              if (tableData && Array.isArray(tableData.players)) {
-                setTable((prev: any) => ({
-                  ...prev,
-                  players: (tableData.players as any[]).map((p: any) => ({
-                    ...p,
-                    totalPoints: totals[p.id] || 0
-                  }))
-                }));
-              }
+              // Refresh players to include latest totals
+              setPlayers(prev => prev.map(p => ({ ...p, totalPoints: totals[p.id] ?? 0 })));
             }
           };
           fetchTotals();
@@ -355,25 +444,65 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     if (processingRequests.includes(reqId)) return;
     setProcessingRequests(prev => [...prev, reqId]);
     try {
-      const { data: req, error } = await supabase.from('buy_in_requests').select('*').eq('id', reqId).single();
-      if (error || !req) return;
+      if (!reqId) return;
+      const { data: req, error: fetchErr } = await supabase
+        .from('buy_in_requests')
+        .select('*')
+        .match({ id: reqId })
+        .maybeSingle();
+      if (fetchErr) {
+        console.error('[PokerTable] Error fetching buy_in_request:', fetchErr);
+        return;
+      }
+      if (!req) {
+        console.warn('[PokerTable] buy_in_request not found for id', reqId);
+        setPendingRequests(prev => prev.filter(r => r.id !== reqId));
+        return;
+      }
 
-      // Ensure buy-in is added to buy_ins table with all required fields
-      await supabase.from('buy_ins').insert({
+      // Build buy-in row without admin_id (schema doesn't have admin_id)
+      const buyInRow = {
         id: uuidv4(),
         table_id: req.table_id,
         player_id: req.player_id,
-        admin_id: profile.id, // admin who approved
         amount: req.amount,
         status: 'approved',
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
+      };
+
+      // Insert approved buy-in and return minimal fields
+      const { data: inserted, error: insertErr } = await supabase
+        .from('buy_ins')
+        .insert([buyInRow])
+        .select('id,player_id,amount')
+        .maybeSingle();
+      if (insertErr || !inserted) {
+        console.error('[PokerTable] Error inserting buy_ins row:', insertErr);
+        return;
+      }
+
+      // Delete original buy_in_request
+      const { error: deleteErr } = await supabase.from('buy_in_requests').delete().eq('id', reqId);
+      if (deleteErr) {
+        console.error('[PokerTable] Error deleting buy_in_request:', deleteErr);
+      }
+
+      // Update local pendingRequests state immediately
+      setPendingRequests(prev => prev.filter(r => r.id !== reqId));
+
+      // Update player totals locally
+      setPlayerTotals(prev => {
+        const next = { ...(prev || {}) };
+        const pid = inserted.player_id;
+        const amt = Number(inserted.amount || 0);
+        next[pid] = (next[pid] || 0) + amt;
+        return next;
       });
 
-      // Remove the request from buy_in_requests
-      await supabase.from('buy_in_requests').delete().eq('id', reqId);
-      setPendingRequests(pendingRequests.filter(r => r.id !== reqId));
+      // Update players state totalPoints if present
+      setPlayers(prev => prev.map(p => p.id === inserted.player_id ? { ...p, totalPoints: (p.totalPoints || 0) + Number(inserted.amount || 0) } : p));
     } finally {
       setProcessingRequests(prev => prev.filter(id => id !== reqId));
     }
@@ -397,59 +526,52 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     setProcessingJoinRequests(prev => [...prev, reqId]);
     
     try {
-      // Find the join request
+      // Guard: ensure reqId is present
+      if (!reqId) {
+        console.warn('[PokerTable] handleApproveJoin called without reqId');
+        return;
+      }
+      // Use match + maybeSingle to avoid PostgREST negotiation issues (406)
       const { data: req, error } = await supabase
         .from('join_requests')
         .select('*')
-        .eq('id', reqId)
-        .single();
-      console.log('[PokerTable] join_request fetched:', req, 'error:', error);
-      if (error || !req) return;
-
-      // Fetch the joining user's profile for correct name
-      const { data: userProfile, error: userError } = await supabase
-        .from('users')
-        .select('id, name')
-        .eq('id', req.player_id)
-        .single();
-      console.log('[PokerTable] userProfile fetched:', userProfile, 'error:', userError);
-      if (userError || !userProfile) return;
-
-      // Check if player is already in the table (avoid duplicates)
-      const playerIndex = table.players.findIndex((p: any) => p.id === userProfile.id);
-      if (playerIndex !== -1) {
-        // If player exists and is inactive, reactivate them
-        const updatedPlayers = table.players.map((p: any, idx: number) =>
-          idx === playerIndex ? { ...p, active: true } : p
-        );
-        await supabase
-          .from('poker_tables')
-          .update({ players: updatedPlayers })
-          .eq('id', table.id);
-
-        // Remove the join request
-        await supabase.from('join_requests').delete().eq('id', reqId);
-        setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
-        setTable({ ...table, players: updatedPlayers });
+        .match({ id: reqId })
+        .maybeSingle();
+      if (error) {
+        console.error('[PokerTable] Error fetching join_request:', error);
+        return;
+      }
+      if (!req) {
+        console.warn('[PokerTable] join_request not found for id', reqId);
         return;
       }
 
-      // --- Add the joining player to the table's players array ---
-      const updatedPlayers = [
-        ...table.players,
-        { id: userProfile.id, name: userProfile.name, totalPoints: 0, active: true }
-      ];
-      console.log('[PokerTable] Updating poker_tables row with new players array:', updatedPlayers);
+      const { data: playerProfile, error: playerError } = await supabase
+        .from('players')
+        .select('id, name')
+        .eq('id', req.player_id)
+        .single();
+      if (playerError || !playerProfile) return;
 
-      const { error: updateError } = await supabase
-        .from('poker_tables')
-        .update({ players: updatedPlayers })
-        .eq('id', table.id);
+      // Check if already in table via table_players (use player_id)
+      const { data: existingRows } = await supabase
+        .from('table_players')
+        .select('*')
+        .eq('table_id', table.id)
+        .in('player_id', [playerProfile.id]);
 
-      if (updateError) {
-        console.error('[PokerTable] Error updating poker_tables row:', updateError);
+      if (existingRows && existingRows.length > 0) {
+        // reactivate
+        await supabase
+          .from('table_players')
+          .update({ status: 'active' })
+          .eq('table_id', table.id)
+          .eq('player_id', playerProfile.id);
       } else {
-        console.log('[PokerTable] poker_tables row updated successfully.');
+        // insert new join record in table_players
+        await supabase
+          .from('table_players')
+          .insert({ table_id: table.id, player_id: playerProfile.id, status: 'active' });
       }
 
       // Remove the join request
@@ -457,18 +579,13 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       if (deleteError) {
         console.error('[PokerTable] Error deleting join_request:', deleteError);
       } else {
-        console.log('[PokerTable] join_request deleted successfully.');
+        // Immediately remove from local pending list so UI updates without waiting for realtime fetch
+        setPendingJoinRequests(prev => prev.filter((r: any) => r.id !== reqId));
       }
-      setPendingJoinRequests(pendingJoinRequests.filter(r => r.id !== reqId));
+      // reload players from join table
+      await loadPlayersFromJoinTable(table.id);
 
-      // Refresh table state
-      setTable({ ...table, players: updatedPlayers });
-      console.log('[PokerTable] setTable called with updated players:', updatedPlayers);
-
-      // --- Notify the joining player (client) ---
-      console.log('[PokerTable] Notifying player about successful join');
-
-      // Send a broadcast event to notify the joining user
+      // notify the joining player
       supabase
         .channel('user_' + req.player_id)
         .send({
@@ -575,9 +692,9 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       .upsert({ table_id: table.id, player_id: playerId, endup: value });
   };
 
-  // For displaying total points, always use table.players from props
-  const totalPoints = Array.isArray(table.players)
-    ? table.players.reduce((sum, p) => sum + (typeof p.points === 'number' ? p.points : 0), 0)
+  // For displaying total points, always use players state
+  const totalPoints = Array.isArray(players)
+    ? players.reduce((sum, p) => sum + (typeof p.totalPoints === 'number' ? p.totalPoints : 0), 0)
     : 0;
 
   // Guard: If table is null, navigate away and do not render PokerTable UI
@@ -589,12 +706,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     return null;
   }
 
-  // Log values right before rendering
+  // Log values right before rendering (use players)
   console.log('[PokerTable] Rendering table info:', {
     joinCode: table?.joinCode,
     adminName: table?.adminName,
     tableName: table?.name,
-    players: table?.players,
+    players
   });
 
   // Handler for exiting the game
@@ -602,33 +719,39 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
     if (!table || !profile) return;
     setProcessingExit(true);
 
-    // Mark player as inactive instead of removing from players array
-    const updatedPlayers = table.players.map((p: any) =>
-      p.id === profile.id ? { ...p, active: false } : p
-    );
+    // Mark player as inactive in table_players
+    await supabase
+      .from('table_players')
+      .upsert({ table_id: table.id, player_id: profile.id, status: 'inactive' });
 
     // If the exiting player is admin, transfer admin role
-    let updateFields: any = { players: updatedPlayers };
-    if (isAdmin && updatedPlayers.filter((p: any) => p.active !== false).length > 0) {
-      // Randomly select a new active admin
-      const activePlayers = updatedPlayers.filter((p: any) => p.active !== false);
-      const newAdmin = activePlayers[Math.floor(Math.random() * activePlayers.length)];
-      updateFields.admin_user_id = newAdmin.id;
-      updateFields.admin_pending_approval = true;
+    if (isAdmin) {
+      const activePlayers = players.filter((p: any) => p.active !== false && p.id !== profile.id);
+      if (activePlayers.length > 0) {
+        const newAdmin = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+        await supabase
+          .from('poker_tables')
+          .update({ admin_player_id: newAdmin.id, admin_pending_approval: true })
+          .eq('id', table.id);
 
-      supabase
-        .channel('user_' + newAdmin.id)
-        .send({
-          type: 'broadcast',
-          event: 'admin_role_assigned',
-          payload: { tableId: table.id }
-        });
+        // notify new admin
+        supabase
+          .channel('user_' + newAdmin.id)
+          .send({
+            type: 'broadcast',
+            event: 'admin_role_assigned',
+            payload: { tableId: table.id }
+          });
+      } else {
+        await supabase
+          .from('poker_tables')
+          .update({ admin_player_id: null })
+          .eq('id', table.id);
+      }
     }
 
-    await supabase
-      .from('poker_tables')
-      .update(updateFields)
-      .eq('id', table.id);
+    // Refresh players list
+    await loadPlayersFromJoinTable(table.id);
 
     storage.setTable(null);
     navigate('/table-selection');
@@ -708,10 +831,10 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                       <TableRow>
                         <TableHead style={{ minWidth: 60, padding: '2px 4px' }}>Player</TableHead>
                         {(() => {
-                          const playerBuyIns = table.players.map((p: any) =>
+                          const playerBuyIns = players.map((p: any) =>
                             historyData.filter((row: any) => row.player_id === p.id)
                           );
-                          const maxBuyIns = Math.max(...playerBuyIns.map(arr => arr.length), 0);
+                          const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
                           return Array.from({ length: maxBuyIns }).map((_, idx) => (
                             <TableHead key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
                               {idx + 1}
@@ -721,7 +844,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {table.players.map((p: any) => {
+                      {players.map((p: any) => {
                         const buyIns = historyData
                           .filter((row: any) => row.player_id === p.id)
                           .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -734,10 +857,10 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                               </TableCell>
                             ))}
                             {Array.from({ length: Math.max(0, (() => {
-                              const playerBuyIns = table.players.map((pl: any) =>
+                              const playerBuyIns = players.map((pl: any) =>
                                 historyData.filter((row: any) => row.player_id === pl.id)
                               );
-                              const maxBuyIns = Math.max(...playerBuyIns.map(arr => arr.length), 0);
+                              const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
                               return maxBuyIns - buyIns.length;
                             })()) }).map((_, idx) => (
                               <TableCell key={`empty-${idx}`} style={{ minWidth: 40, padding: '2px 4px' }}></TableCell>
@@ -804,7 +927,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {Array.isArray(table.players) && table.players.map((p: any) => (
+                        {Array.isArray(players) && players.map((p: any) => (
                           <TableRow key={p.id}>
                             <TableCell style={{
                               minWidth: 50,
@@ -878,7 +1001,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                     <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
                       <div>
                         <div className="font-medium">
-                          {table.players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
+                          {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {r.amount >= 0 ? '+' : ''}${r.amount.toFixed(2)}
@@ -918,7 +1041,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
                 <div className="space-y-3">
                   {pendingJoinRequests.map((r) => {
                     // Show only player name, hide player ID
-                    const playerObj = table.players.find((p: any) => p.id === r.player_id);
+                    const playerObj = players.find((p: any) => p.id === r.player_id);
                     const displayName = playerObj?.name || r.player_name || '';
                     return (
                       <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
@@ -984,7 +1107,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
             </TableHeader>
             <TableBody>
               {/* Always show all players, regardless of active status */}
-              {table.players.map((p: any) => (
+              {players.map((p: any) => (
                 <TableRow key={p.id} className={p.active === false ? 'opacity-50' : ''}>
                   <TableCell>
                     {p.name}
