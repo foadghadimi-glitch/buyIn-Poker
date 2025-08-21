@@ -97,20 +97,174 @@ All colors MUST be HSL.
   }
 }
 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Poker-themed custom styles */
 @layer components {
   .bg-gradient-page {
-    background-image: var(--gradient-surface);
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 25%, #3b82f6 50%, #60a5fa 75%, #93c5fd 100%);
+    min-height: 100vh;
   }
-  .variant-hero {
-    background-image: var(--gradient-primary);
-    color: hsl(var(--primary-foreground));
-    border: 1px solid hsl(var(--ring) / 0.25);
-    box-shadow: var(--shadow-elegant);
-    transition: var(--transition-smooth);
+
+  .bg-gradient-card {
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 50%, #e2e8f0 100%);
   }
-  .variant-hero:hover {
-    box-shadow: var(--shadow-glow);
-    filter: saturate(1.05);
+
+  .bg-gradient-hero {
+    background: linear-gradient(135deg, #dc2626 0%, #ef4444 50%, #f87171 100%);
   }
-  .shadow-elegant { box-shadow: var(--shadow-elegant); }
+
+  .bg-gradient-success {
+    background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
+  }
+
+  .bg-gradient-warning {
+    background: linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #fbbf24 100%);
+  }
+
+  .shadow-elegant {
+    box-shadow: 
+      0 20px 25px -5px rgba(0, 0, 0, 0.1),
+      0 10px 10px -5px rgba(0, 0, 0, 0.04),
+      0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .shadow-card {
+    box-shadow: 
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06),
+      0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .card-suit {
+    font-size: 1.5rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .card-suit.spade { color: #1f2937; }
+  .card-suit.heart { color: #dc2626; }
+  .card-suit.diamond { color: #2563eb; }
+  .card-suit.club { color: #1f2937; }
+
+  .poker-chip {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #fbbf24, #f59e0b);
+    border: 3px solid #d97706;
+    box-shadow: 
+      0 4px 8px rgba(0, 0, 0, 0.2),
+      inset 0 2px 4px rgba(255, 255, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #92400e;
+    font-weight: bold;
+    font-size: 0.875rem;
+  }
+
+  .poker-table {
+    background: radial-gradient(ellipse at center, #059669 0%, #047857 50%, #065f46 100%);
+    border: 8px solid #92400e;
+    border-radius: 200px;
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.3),
+      inset 0 4px 8px rgba(255, 255, 255, 0.1);
+  }
+
+  .poker-card {
+    background: linear-gradient(145deg, #ffffff, #f8fafc);
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 
+      0 4px 6px rgba(0, 0, 0, 0.1),
+      0 2px 4px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease;
+  }
+
+  .poker-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+      0 8px 12px rgba(0, 0, 0, 0.15),
+      0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .btn-poker {
+    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 active:scale-95;
+  }
+
+  .btn-poker.primary {
+    @apply bg-gradient-hero text-white shadow-elegant hover:shadow-lg;
+  }
+
+  .btn-poker.secondary {
+    @apply bg-gradient-card text-gray-800 shadow-card hover:shadow-elegant;
+  }
+
+  .btn-poker.success {
+    @apply bg-gradient-success text-white shadow-elegant hover:shadow-lg;
+  }
+
+  .btn-poker.warning {
+    @apply bg-gradient-warning text-white shadow-elegant hover:shadow-lg;
+  }
+
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .text-glow {
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-bounce-slow {
+    animation: bounce 2s infinite;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .poker-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    padding: 2rem;
+  }
+
+  .poker-header {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+    color: white;
+    padding: 2rem;
+    text-align: center;
+    border-radius: 0 0 2rem 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .poker-footer {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    border-radius: 2rem 2rem 0 0;
+    margin-top: 2rem;
+  }
 }

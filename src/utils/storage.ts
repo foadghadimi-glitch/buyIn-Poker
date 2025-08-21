@@ -1,4 +1,5 @@
 import { Profile, Table } from '@/types';
+import { Player, PokerTable } from '@/integrations/supabase/types';
 
 // Add logging and checks to storage utility to prevent stale/null data
 
@@ -6,11 +7,11 @@ const PROFILE_KEY = 'profile';
 const TABLE_KEY = 'table';
 
 export const storage = {
-  setProfile(profile: any) {
+  setProfile(profile: Player) {
     console.log('[storage] setProfile:', profile);
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   },
-  getProfile() {
+  getProfile(): Player | null {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (!raw) {
       console.warn('[storage] getProfile: no profile found in storage');
@@ -28,11 +29,15 @@ export const storage = {
       return null;
     }
   },
-  setTable(table: any) {
+  setTable(table: PokerTable | null) {
     console.log('[storage] setTable:', table);
-    localStorage.setItem(TABLE_KEY, JSON.stringify(table));
+    if (table) {
+      localStorage.setItem(TABLE_KEY, JSON.stringify(table));
+    } else {
+      localStorage.removeItem(TABLE_KEY);
+    }
   },
-  getTable() {
+  getTable(): PokerTable | null {
     const raw = localStorage.getItem(TABLE_KEY);
     if (!raw) {
       console.warn('[storage] getTable: no table found in storage');
