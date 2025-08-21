@@ -176,16 +176,25 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
 
     try {
       for (let attempt = 0; attempt < 6; attempt++) {
-        const { data: tpRow, error } = await supabase
+        // Simplified query - only use player_id since our schema doesn't have user_id
+        let tpRow = null;
+        let error = null;
+        
+        // Find by player_id only (our schema only has player_id)
+        const { data: playerRow, error: playerError } = await supabase
           .from('table_players')
-          .select('status')
+          .select('status, player_id')
           .eq('table_id', id)
           .eq('player_id', profile.id)
           .maybeSingle();
+          
+        if (playerRow) {
+          tpRow = playerRow;
+        } else {
+          error = playerError;
+        }
 
-        if (error) {
-          console.warn('[PokerTable] ensureCurrentPlayerActive lookup failed (attempt):', error);
-        } else if (tpRow && tpRow.status === 'active') {
+        if (tpRow && tpRow.status === 'active') {
           // Clear pending markers for the current user
           setPendingJoinPlayerIds(prev => {
             const next = new Set(prev);
@@ -245,13 +254,13 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'table_players', filter: `table_id=eq.${table.id}` },
         async (payload) => {
-          const newRow = payload?.new;
-          const oldRow = payload?.old;
+          const newRow = payload?.new as any;
+          const oldRow = payload?.old as any;
 
           // 1) Apply the changed player's status locally first (fast UI update for other viewers).
           try {
             if (newRow) {
-              const changedPlayerId = newRow.player_id ?? newRow.user_id;
+              const changedPlayerId = newRow.player_id;
               if (changedPlayerId) {
                 // Dev: if admin rejoined, log on all viewers for visibility (non-production only)
                 if (process.env.NODE_ENV !== 'production' && changedPlayerId === table?.admin_player_id && newRow.status === 'active') {
@@ -284,7 +293,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
             await ensureCurrentPlayerActive(table.id);
 
             // Dev: after reconciliation, log admin rejoin snapshot so regular clients show it
-            if (process.env.NODE_ENV !== 'production' && newRow && (newRow.player_id ?? newRow.user_id) === table?.admin_player_id && newRow.status === 'active') {
+            if (process.env.NODE_ENV !== 'production' && newRow && newRow.player_id === table?.admin_player_id && newRow.status === 'active') {
               const adminPlayer = players.find(p => p.id === table.admin_player_id);
               const totalsSnapshot = { playerTotals, totalPlayers: players.length, adminId: table.admin_player_id, adminName: adminPlayer?.name || null };
               console.debug('[PokerTable] Admin rejoined (reconciled):', totalsSnapshot);
@@ -296,7 +305,7 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
           // 3) Existing defensive flow: if current user was re-activated without a pending request, run verification.
           try {
             if (!newRow || !profile?.id) return;
-            const newPlayerId = newRow.player_id ?? newRow.user_id;
+            const newPlayerId = newRow.player_id;
             if (newPlayerId !== profile.id) return;
             if (profile.id === table?.admin_player_id) return; // admin allowed
             const becameActive = (newRow.status === 'active') && (oldRow?.status !== 'active');
@@ -484,12 +493,12 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
         // map player id -> status from joinRows
         const statusById: Record<string, string | undefined> = {};
         (joinRows || []).forEach((r: any) => {
-          const pid = r.user_id ?? r.player_id;
+          const pid = r.player_id;
           if (pid) statusById[pid] = r.status;
         });
 
         const ids = (joinRows || [])
-          .map((r: any) => r.user_id ?? r.player_id) // support both column names
+          .map((r: any) => r.player_id) // only use player_id
           .filter(Boolean);
 
         if (ids.length === 0) {
@@ -776,6 +785,19 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
       )
       .subscribe();
 
+    // Helper to fetch pending buy-in requests
+    const fetchPendingBuyIns = async () => {
+      const { data, error } = await supabase
+        .from('buy_in_requests')
+        .select('*')
+        .eq('table_id', table.id)
+        .eq('status', 'pending');
+      if (!error && data) setPendingRequests(data);
+    };
+
+    // Initial fetch of pending buy-ins
+    fetchPendingBuyIns();
+
     // --- Add real-time subscription for buy-in requests ---
     const buyInChannel = supabase
       .channel('buy_in_requests_admin_' + table.id)
@@ -788,23 +810,40 @@ const PokerTable = ({ table: propTable }: { table?: PokerTableRow }) => {
           filter: `table_id=eq.${table.id}`
         },
         payload => {
-          // Fetch pending buy-in requests when a new request is added/updated/deleted
-          const fetchRequests = async () => {
-            const { data, error } = await supabase
-              .from('buy_in_requests')
-              .select('*')
-              .eq('table_id', table.id)
-              .eq('status', 'pending');
-            if (!error && data) setPendingRequests(data);
-          };
-          fetchRequests();
+          // Refresh pending list
+          fetchPendingBuyIns();
+          // If a new request was inserted, show a toast to the admin
+          const evt = (payload as any)?.eventType || (payload as any)?.event;
+          const newRow: any = (payload as any)?.new;
+          if (evt === 'INSERT' && newRow && newRow.table_id === table.id) {
+            const amount = newRow.amount;
+            const playerId = newRow.player_id;
+            // Fire-and-forget attempt to get player name (non-blocking)
+            (async () => {
+              try {
+                const { data: p } = await supabase
+                  .from('players')
+                  .select('name')
+                  .eq('id', playerId)
+                  .maybeSingle();
+                const who = p?.name || 'A player';
+                toast('New buy-in request', { description: `${who} requested ${amount}` });
+              } catch {
+                toast('New buy-in request', { description: `Amount: ${amount}` });
+              }
+            })();
+          }
         }
       )
       .subscribe();
 
+    // Polling fallback in case realtime is temporarily disconnected
+    const pollInterval = setInterval(fetchPendingBuyIns, 6000);
+
     return () => {
       supabase.removeChannel(joinChannel);
       supabase.removeChannel(buyInChannel);
+      clearInterval(pollInterval);
     };
   }, [table?.id, isAdmin]);
 

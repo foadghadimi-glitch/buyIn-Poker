@@ -3,7 +3,8 @@ import Onboarding from './Onboarding';
 import TableSelection from './TableSelection';
 import PokerTable from './PokerTable';
 import { storage } from '@/utils/storage';
-import { supabase } from '@/integrations/supabase/client'; // Ensure this import is present
+import { supabase } from '@/integrations/supabase/client';
+import { Player, PokerTable as PokerTableType, TablePlayer } from '@/integrations/supabase/types';
 
 // Add a visible debug log to the page for troubleshooting
 function DebugPanel({ logs }: { logs: string[] }) {
@@ -59,20 +60,29 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+type TableWithPlayers = PokerTableType & {
+  players: TablePlayer[];
+  adminName?: string;
+  joinCode?: number;
+  adminId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 const Index = () => {
-  const [profile, setProfile] = useState(storage.getProfile());
+  const [profile, setProfile] = useState<Player | null>(storage.getProfile());
   const [currentPage, setCurrentPage] = useState<'onboarding' | 'tableSelection' | 'pokerTable'>(
     profile ? 'tableSelection' : 'onboarding'
   );
-  const [table, setTable] = useState<any>(null);
+  const [table, setTable] = useState<TableWithPlayers | null>(null);
   const [waitingApproval, setWaitingApproval] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [isRefresh, setIsRefresh] = useState(true);
   // add state for players loaded from table_players
-  const [players, setPlayers] = useState<any[]>(storage.getTable()?.players || []);
+  const [players, setPlayers] = useState<TablePlayer[]>(storage.getTable()?.players || []);
 
   // Helper to add debug logs
-  const addLog = (msg: string, obj?: any) => {
+  const addLog = (msg: string, obj?: unknown) => {
     setDebugLogs(logs => [...logs.slice(-40), msg + (obj ? ' ' + JSON.stringify(obj) : '')]);
   };
 
@@ -89,8 +99,8 @@ const Index = () => {
         setPlayers([]);
         return;
       }
-      // Prefer player_id; fall back to user_id if present
-      const ids = (joinRows || []).map((r: any) => r.player_id ?? r.user_id).filter(Boolean);
+              // Only use player_id (our schema doesn't have user_id)
+        const ids = (joinRows || []).map((r: { player_id: string }) => r.player_id).filter(Boolean);
       if (!ids.length) {
         setPlayers([]);
         return;
@@ -105,7 +115,7 @@ const Index = () => {
         return;
       }
       // map to expected shape and attach default totals (0)
-      const newPlayers = (playersData || []).map((p: any) => ({
+      const newPlayers: TablePlayer[] = (playersData || []).map((p: { id: string; name: string }) => ({
         id: p.id,
         name: p.name,
         totalPoints: 0,
@@ -125,7 +135,7 @@ const Index = () => {
     // Add debug log to show fetched table players and current user id
     const fetchTable = async () => {
       addLog('[Index] fetchTable called');
-      const { data: tableData, error } = await (supabase as any)
+      const { data: tableData, error } = await supabase
         .from('poker_tables')
         .select('*')
         .eq('id', table.id)
@@ -137,7 +147,7 @@ const Index = () => {
         const profile = storage.getProfile();
 
         // Check membership via table_players.player_id (do not rely on poker_tables.players)
-        const { data: joinRow, error: jrErr } = await (supabase as any)
+        const { data: joinRow, error: jrErr } = await supabase
           .from('table_players')
           .select('player_id')
           .eq('table_id', table.id)
@@ -149,15 +159,16 @@ const Index = () => {
         if (isPlayer) {
           addLog('[Index] User found in table_players. Moving to PokerTable', { profileId: profile?.id });
           if (currentPage === 'tableSelection' && waitingApproval) {
-            const tableObj = {
-              id: tableData.id,
-              name: tableData.name,
-              joinCode: (tableData as any).join_code,
-              adminId: (tableData as any).admin_player_id, // ensure admin_player_id
-              status: (tableData as any).status,
-              createdAt: (tableData as any).created_at,
-              updatedAt: (tableData as any).updated_at,
-            };
+                          const tableObj: TableWithPlayers = {
+                id: tableData.id,
+                name: tableData.name,
+                joinCode: tableData.join_code,
+                adminId: tableData.admin_player_id, // ensure admin_player_id
+                status: tableData.status,
+                createdAt: tableData.created_at,
+                updatedAt: tableData.updated_at,
+                players: [],
+              };
             storage.setTable(tableObj);
             setTable(tableObj);
             setWaitingApproval(false);
@@ -165,7 +176,7 @@ const Index = () => {
           }
         } else {
           addLog('[Index] User not in table_players. Checking join_requests...', { profileId: profile?.id });
-          const { data: joinReqs, error: joinError } = await (supabase as any)
+          const { data: joinReqs, error: joinError } = await supabase
             .from('join_requests')
             .select('*')
             .eq('table_id', table.id)
@@ -221,18 +232,18 @@ const Index = () => {
   }, [currentPage, profile, table]);
 
   // Onboarding complete: ensure profile exists in Supabase
-  const handleOnboardingComplete = async (profileData: any) => {
+  const handleOnboardingComplete = async (profileData: Player) => {
     console.log('[Index] Onboarding complete:', profileData);
     // Check if profile exists in Supabase
     const { data: existingProfile, error } = await supabase
-      .from('players') // <-- changed from 'users'
+      .from('players')
       .select('id')
       .eq('id', profileData.id)
       .maybeSingle();
 
     if (!existingProfile && !error) {
       // Insert profile if not exists
-      await supabase.from('players').insert([profileData]); // <-- changed from 'users'
+      await supabase.from('players').insert([profileData]);
     }
     storage.setProfile(profileData);
     setProfile(profileData);
@@ -243,7 +254,7 @@ const Index = () => {
   // Fix: Ensure table is set after join request
   // Add debug log to show which table is being set
   // Add debug log to show when handleTableSelected is called for join requests
-  const handleTableSelected = (createdTable?: any, joinPending?: boolean) => {
+  const handleTableSelected = (createdTable?: TableWithPlayers, joinPending?: boolean) => {
     console.log('[Index] Table created/selected:', createdTable);
     addLog(`[Index] handleTableSelected called. joinPending=${joinPending}, createdTable=${JSON.stringify(createdTable)}`);
     if (createdTable) {
@@ -282,7 +293,7 @@ const Index = () => {
       profile &&
       table &&
       Array.isArray(players) &&
-      players.some((p: any) => p.id === profile.id)
+      players.some((p: TablePlayer) => p.id === profile.id)
     ) {
       setCurrentPage('pokerTable');
     }
@@ -294,7 +305,7 @@ const Index = () => {
       profile &&
       table &&
       Array.isArray(players) &&
-      players.some((p: any) => p.id === profile.id) &&
+      players.some((p: TablePlayer) => p.id === profile.id) &&
       table.adminId !== profile.id // Only transition for non-admin users
     ) {
       setCurrentPage('pokerTable');
@@ -310,13 +321,13 @@ const Index = () => {
     if (storedProfile) {
       setProfile(storedProfile);
       if (storedTable && storedTable.id) {
-        setTable(storedTable);
+        setTable(storedTable as TableWithPlayers);
         // Decide initial page based on local storage
-        if (storedProfile.id === storedTable.adminId) {
+        if (storedProfile.id === storedTable.admin_player_id) {
           setCurrentPage('pokerTable');
         } else if (
           Array.isArray(storedTable.players) &&
-          storedTable.players.some((p: any) => p.id === storedProfile.id)
+          storedTable.players.some((p: TablePlayer) => p.id === storedProfile.id)
         ) {
           setCurrentPage('pokerTable');
         } else {
@@ -334,7 +345,7 @@ const Index = () => {
     // Fetch latest profile and table from Supabase in background
     if (storedProfile) {
       supabase
-        .from('players') // <-- changed from 'users'
+        .from('players')
         .select('*')
         .eq('id', storedProfile.id)
         .maybeSingle()
@@ -355,24 +366,29 @@ const Index = () => {
           .single()
           .then(async ({ data, error }) => {
             if (!error && data) {
-              const playersArray = Array.isArray(data.players) ? data.players : [];
+              // Players are stored in join table; don't read from poker_tables
               // Note: Points will be merged in the refresh effect using buy_ins
-              let mergedPlayers = playersArray;
+              const mergedPlayers = Array.isArray(players) ? players : [];
               
-              const tableObj = {
+              const tableObj: TableWithPlayers = {
                 id: data.id,
                 name: data.name,
                 joinCode: data.join_code,
                 adminId: data.admin_player_id, // <-- updated
                 status: data.status,
-                createdAt: (data as any).created_at,
-                updatedAt: (data as any).updated_at,
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
                 players: mergedPlayers,
+                admin_user_id: data.admin_user_id,
+                is_anonymous: data.is_anonymous,
+                original_admin_id: data.original_admin_id,
               };
               // Log before saving to storage:
               console.log('[Index] Saving tableObj to storage:', tableObj);
               storage.setTable(tableObj);
               setTable(tableObj);
+              // Load players from join table after refreshing table
+              try { await loadPlayersFromJoinTable(data.id); } catch {}
               // Optionally update currentPage if needed
             } else {
               addLog('[Index] Error fetching table on initial load:', error);
@@ -391,7 +407,7 @@ const Index = () => {
       players.length > 0
     ) {
       addLog(`[Index] Refresh effect triggered for table:`, table);
-      const playerIds = players.map((p: any) => p.id).filter(Boolean);
+      const playerIds = players.map((p: TablePlayer) => p.id).filter(Boolean);
       addLog(`[Index] Player IDs for refresh: ${JSON.stringify(playerIds)}`);
       if (playerIds.length === 0) return;
 
@@ -424,7 +440,7 @@ const Index = () => {
           addLog(`[Index] Admin ID from DB: ${adminId}`);
           if (adminId) {
             const { data: adminProfile, error: adminProfileError } = await supabase
-              .from('players') // <-- changed from 'users'
+              .from('players')
               .select('id,name')
               .eq('id', adminId)
               .maybeSingle();
@@ -437,7 +453,7 @@ const Index = () => {
 
           // Fetch player profiles for playerIds
           supabase
-            .from('players') // <-- changed from 'users'
+            .from('players')
             .select('id,name')
             .in('id', playerIds)
             .then(async ({ data: profilesData, error: profilesError }) => {
@@ -457,12 +473,12 @@ const Index = () => {
               }
 
               const buyInTotals: Record<string, number> = {};
-              (buyInsData || []).forEach((row: any) => {
+              (buyInsData || []).forEach((row: { player_id: string; amount: number }) => {
                 buyInTotals[row.player_id] = (buyInTotals[row.player_id] || 0) + Number(row.amount);
               });
 
-              const mergedPlayers = players.map((p: any) => {
-                const profile = profilesData?.find((prof: any) => prof.id === p.id);
+              const mergedPlayers = players.map((p: TablePlayer) => {
+                const profile = profilesData?.find((prof: { id: string; name: string }) => prof.id === p.id);
                 const name = profile ? profile.name : p.name;
                 const points = buyInTotals[p.id] || 0;
                 return { ...p, points, totalPoints: points, name };
@@ -470,7 +486,7 @@ const Index = () => {
 
               // Prefer DB adminName, fallback to mergedPlayers lookup, then previous value
               if (!adminName) {
-                const adminPlayer = mergedPlayers.find((p: any) => p.id === adminId);
+                const adminPlayer = mergedPlayers.find((p: TablePlayer) => p.id === adminId);
                 addLog(`[Index] Fallback adminPlayer from mergedPlayers:`, adminPlayer);
                 adminName = adminPlayer ? adminPlayer.name : (table.adminName || 'Unknown');
               }
@@ -489,21 +505,21 @@ const Index = () => {
                 joinCode: tableData.join_code,
                 adminId: tableData.admin_player_id, // <-- use admin_player_id
                 status: tableData.status,
-                createdAt: (tableData as any).created_at,
-                updatedAt: (tableData as any).updated_at,
+                createdAt: tableData.created_at,
+                updatedAt: tableData.updated_at,
                 players: mergedPlayers,
                 adminName,
               });
 
-              const updatedTable = {
+              const updatedTable: TableWithPlayers = {
                 ...table,
                 players: mergedPlayers,
                 adminId: tableData.admin_player_id, // <-- use admin_player_id
                 adminName,
                 joinCode,
                 name: tableData.name,
-                createdAt: (tableData as any).created_at,
-                updatedAt: (tableData as any).updated_at,
+                createdAt: tableData.created_at,
+                updatedAt: tableData.updated_at,
                 status: tableData.status,
               };
               // Log before saving to storage:
@@ -563,12 +579,12 @@ const Index = () => {
       console.log('[Index] PokerTable tableName present?', !!table.name);
       // Log all table keys for debugging
       Object.keys(table).forEach(key => {
-        console.log(`[Index] Table key: ${key} | value:`, table[key]);
+        console.log(`[Index] Table key: ${key} | value:`, table[key as keyof TableWithPlayers]);
       });
       // Log all players for debugging
       if (Array.isArray(players)) {
-        players.forEach((p: any, idx: number) => {
-          console.log(`[Index] Player[${idx}]: id=${p.id} name=${p.name} points=${p.points} totalPoints=${p.totalPoints}`);
+        players.forEach((p: TablePlayer, idx: number) => {
+          console.log(`[Index] Player[${idx}]: id=${p.id} name=${p.name} points=${(p as any).points} totalPoints=${p.totalPoints}`);
         });
       }
     }
@@ -576,20 +592,20 @@ const Index = () => {
     if (!table) {
       const storedTable = storage.getTable();
       console.log('[Index] No table in state, checking storage:', storedTable);
-      if (storedTable) setTable(storedTable);
+      if (storedTable) setTable(storedTable as TableWithPlayers);
       else return <div className="min-h-screen flex items-center justify-center">No Table Found</div>;
     }
 
     // Add logging for the total values shown in the below table
     if (table && Array.isArray(players)) {
-      const playerTotalsLog = players.map((p: any) => ({
+      const playerTotalsLog = players.map((p: TablePlayer) => ({
         id: p.id,
         name: p.name,
-        points: p.points,
+        points: (p as any).points,
         totalPoints: p.totalPoints
       }));
-      const sumPoints = players.reduce((sum: number, p: any) => sum + (typeof p.points === 'number' ? p.points : 0), 0);
-      const sumTotalPoints = players.reduce((sum: number, p: any) => sum + (typeof p.totalPoints === 'number' ? p.totalPoints : 0), 0);
+      const sumPoints = players.reduce((sum: number, p: TablePlayer) => sum + (typeof (p as any).points === 'number' ? (p as any).points : 0), 0);
+      const sumTotalPoints = players.reduce((sum: number, p: TablePlayer) => sum + (typeof p.totalPoints === 'number' ? p.totalPoints : 0), 0);
       console.log('[Index] PokerTable bottom table playerTotals:', playerTotalsLog);
       console.log('[Index] PokerTable bottom table sumPoints:', sumPoints, '| sumTotalPoints:', sumTotalPoints);
     }
@@ -600,7 +616,7 @@ const Index = () => {
       table &&
       Array.isArray(players) &&
       players.length > 0 &&
-      players.some((p: any) => typeof p.points !== 'number')
+      players.some((p: TablePlayer) => typeof (p as any).points !== 'number')
     ) {
       console.log('[Index] SHOWING: Loading player points... | isRefresh:', isRefresh, '| table.players:', table.players);
       return <div className="min-h-screen flex items-center justify-center">Loading player points...</div>;
