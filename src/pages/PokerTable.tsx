@@ -42,24 +42,64 @@ interface PokerTableProps {
   };
   profile?: Player | null; // ADDED
   refreshKey?: number; // ADD
+  onExit: () => void; // ADDED
 }
 
-const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
+const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => {
   // NORMALIZE admin id & join code (covers snake_case / camelCase)
-  const normalizedAdminId = table.adminId || (table as any).admin_player_id;
+  const normalizedAdminId = table.adminId || table.admin_player_id;
   const normalizedJoinCode = table.joinCode ?? (table as any).join_code;
   const isAdmin = !!profile && !!normalizedAdminId && profile.id === normalizedAdminId;
 
-  // DEBUG (remove later if desired)
-  if (typeof window !== 'undefined') {
-    console.log('[PokerTable][AdminCheck]', {
+  // Add new state to hold players loaded from table_players + players table
+  const [players, setPlayers] = useState<TablePlayer[]>(table?.players || []);
+
+  // NEW: Determine if the current user is a player on the table
+  const isPlayerOnTable = useMemo(() => {
+    if (!profile?.id || !players) return false;
+    return players.some(p => p.id === profile.id);
+  }, [players, profile?.id]);
+
+  useEffect(() => {
+    const reasons: string[] = [];
+    if (!profile) reasons.push('no profile');
+    if (!normalizedAdminId) reasons.push('no normalizedAdminId');
+    if (profile && normalizedAdminId && profile.id !== normalizedAdminId) {
+      reasons.push(`mismatch profile.id(${profile.id}) != normalizedAdminId(${normalizedAdminId})`);
+    }
+    console.log('[PokerTable.AdminEval]', {
+      tableId: table?.id,
       profileId: profile?.id,
       normalizedAdminId,
-      adminName: table.adminName,
       isAdmin,
-      rawKeys: Object.keys(table || {})
+      reasonsIfNotAdmin: isAdmin ? [] : reasons,
+      tableKeys: Object.keys(table || {})
     });
-  }
+  }, [table?.id, profile?.id, normalizedAdminId, isAdmin]);
+
+  // NEW: verify incoming props and normalization
+  useEffect(() => {
+    console.log('[PokerTable.mount] props:', {
+      table,
+      profile,
+      normalizedAdminId,
+      normalizedJoinCode,
+      isAdmin
+    });
+  }, []);
+
+  // REPLACED noisy per-render debug log with effect (fires only on relevant changes)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+      console.log('[PokerTable][AdminCheck]', {
+        profileId: profile?.id,
+        normalizedAdminId,
+        adminName: table.adminName,
+        isAdmin,
+        rawKeys: Object.keys(table || {})
+      });
+    }
+  }, [profile?.id, normalizedAdminId, table.adminName, isAdmin]);
 
   // dev-only: log when propTable identity changes (avoid logging every render)
   useEffect(() => {
@@ -77,6 +117,8 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
   const [amount, setAmount] = useState('');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [playerTotals, setPlayerTotals] = useState<Record<string, number>>({});
+  // DIAG: keep previous totals snapshot for diff logging
+  const prevTotalsRef = useRef<Record<string, number>>({});
   const [pendingJoinRequests, setPendingJoinRequests] = useState<any[]>([]);
   const [historyData, setHistoryData] = useState<any[]>([]); // Store buy-in history
   const [endUpValues, setEndUpValues] = useState<Record<string, number>>({}); // Store end up values per player
@@ -85,27 +127,16 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
   const [processingExit, setProcessingExit] = useState(false);
   const [adminName, setAdminName] = useState<string>('');
 
-// NEW: fetch admin name (used by refreshTableData + fallback effect)
+  // NEW: fetch admin name (used by refreshTableData + fallback effect)
   const fetchAdminName = async (tableId: string) => {
     try {
-      const { data: tbl } = await supabase
-        .from('poker_tables')
-        .select('admin_player_id')
-        .eq('id', tableId)
-        .maybeSingle();
-      const adminId = tbl?.admin_player_id;
-      if (!adminId) {
-        setAdminName('N/A');
-        return;
-      }
-      const { data: player } = await supabase
-        .from('players')
-        .select('name')
-        .eq('id', adminId)
-        .maybeSingle();
+      const { data } = await supabase.from('poker_tables').select('admin_player_id').eq('id', tableId).maybeSingle();
+      const adminId = data?.admin_player_id;
+      if (!adminId) return setAdminName('N/A');
+      const { data: player } = await supabase.from('players').select('name').eq('id', adminId).maybeSingle();
       setAdminName(player?.name || 'N/A');
-    } catch {
-      setAdminName(prev => prev || 'Loading...');
+    } catch (e) {
+      console.warn('[PokerTable][fetchAdminName] error', e);
     }
   };
 
@@ -131,10 +162,11 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
         (playersData || []).forEach(p => { nameById[p.id] = p.name; });
       }
       const mapped = rows.map(r => ({ ...r, player_name: nameById[r.player_id] || 'Unknown' }));
+      console.log('[PokerTable][fetchPendingJoinRequests] mapped', mapped);
       setPendingJoinRequests(mapped);
       setPendingJoinPlayerIds(new Set(mapped.map(r => r.player_id)));
     } catch (e) {
-      console.warn('[PokerTable] fetchPendingJoinRequests failed (ignored):', e);
+      console.warn('[PokerTable][fetchPendingJoinRequests] fail', e);
       setPendingJoinRequests([]);
       setPendingJoinPlayerIds(new Set());
     }
@@ -142,16 +174,15 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
 
 // MODIFIED: refresh includes admin name first
   const refreshTableData = async (tableId: string, source: string) => {
+    console.log('[PokerTable][refresh] start', { tableId, source });
     if (!tableId) return;
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug('[PokerTable] refreshTableData', { source, tableId });
-    }
-    await fetchAdminName(tableId);                 // ADDED
+    await fetchAdminName(tableId);
     await fetchPendingJoinRequests(tableId);
     const totals = await fetchTotals(tableId);
     await loadPlayersFromJoinTable(tableId, totals || {});
     await fetchBuyInHistory(tableId);
     await ensureCurrentPlayerActive(tableId);
+    console.log('[PokerTable][refresh] done', { tableId, source });
   };
 
 // REPLACED: adminName effect to rely on injected prop or fallback fetch (without duplicate logic)
@@ -167,9 +198,6 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
     // Fallback (initial mount before first refresh)
     fetchAdminName(table.id);
   }, [table?.id, table?.adminName]);
-
-  // Add new state to hold players loaded from table_players + players table
-  const [players, setPlayers] = useState<TablePlayer[]>(table?.players || []);
 
   // Track join-request IDs we've already shown notifications for to avoid duplicate toasts.
   // Use a Map<requestId, timestamp> with short TTL so re-subscribes within TTL won't re-show.
@@ -209,54 +237,81 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
   }, [table?.id, refreshKey]);
 
   // New helper: fetch totals for a table and update playerTotals + players
-  const fetchTotals = async (tableId?: string): Promise<Record<string, number> | null> => { // CHANGED (added explicit return type)
+  const fetchTotals = async (tableId?: string): Promise<Record<string, number> | null> => {
     const id = tableId || table?.id;
-    if (!id) return null; // CHANGED (return null on early exit)
+    if (!id) return null;
     try {
-      const { data, error } = await supabase
-        .from('buy_ins')
-        .select('player_id, amount')
-        .eq('table_id', id) as any;
-      if (!error && data) {
-        const totals: Record<string, number> = {};
-        (data as Array<{ player_id: string; amount: number }>).forEach((row) => {
-          totals[row.player_id] = (totals[row.player_id] || 0) + Number(row.amount);
-        });
-        setPlayerTotals(totals);
+      // CHANGED: use RPC (SECURITY DEFINER) instead of direct select (RLS mismatch).
+      const { data, error } = await supabase.rpc('get_table_totals', { p_table_id: id });
+      console.log('[PokerTable][fetchTotals][rpc] raw', {
+        error,
+        rows: data?.length,
+        sample: (data || []).slice(0, 5)
+      });
 
-        // Dev-only: log when totals change so regular users see the update in logs,
-        // include each player's name and status (active/pending/inactive) where available.
-        if (process.env.NODE_ENV !== 'production') {
-          try {
-            const nameById: Record<string, string> = {};
-            (players || []).forEach(p => { if (p?.id) nameById[p.id] = p.name; });
-            const ids = Array.from(new Set([ ...Object.keys(totals), ...(players || []).map(p => p.id) ]));
-            const snapshot = ids.map(pid => {
-              const p = (players || []).find(x => x.id === pid);
-              const status = p ? (p.pending ? 'pending' : (p.active ? 'active' : 'inactive')) : 'unknown';
-              return {
-                id: pid,
-                name: nameById[pid] || null,
-                status,
-                total: totals[pid] ?? 0
-              };
-            });
-            const keys = Object.keys(totals);
-            const sum = keys.reduce((s, k) => s + (Number(totals[k]) || 0), 0);
-            console.debug('[PokerTable] fetchTotals updated:', { tableId: id, players: snapshot, playersCount: keys.length, totalSum: sum });
-          } catch (e) {
-            console.debug('[PokerTable] fetchTotals debug build failed (ignored):', e);
-          }
+      if (error) {
+        console.warn('[PokerTable][fetchTotals][rpc] failed, attempting fallback select', error);
+        // Fallback (may return 0 rows under RLS)
+        const { data: fb, error: fbErr } = await supabase
+          .from('buy_ins')
+          .select('player_id, amount')
+          .eq('table_id', id);
+        if (fbErr) {
+          console.error('[PokerTable][fetchTotals][fallback] failed', fbErr);
+          return null;
         }
-
-        // also merge totals into already-loaded players to keep UI consistent
+        const totals: Record<string, number> = {};
+        (fb || []).forEach((r: any, idx: number) => {
+          if (!r.player_id) return;
+          totals[r.player_id] = (totals[r.player_id] || 0) + Number(r.amount);
+        });
+        prevTotalsRef.current = playerTotals;
+        setPlayerTotals(totals);
         setPlayers(prev => prev.map(p => ({ ...p, totalPoints: totals[p.id] ?? 0 })));
-        return totals; // CHANGED (return freshly computed totals)
+        return totals;
       }
+
+      const totals: Record<string, number> = {};
+      (data || []).forEach((r: any, idx: number) => {
+        if (!r.player_id) {
+          console.warn('[PokerTable][fetchTotals][rpc] null player_id row skipped', r);
+          return;
+        }
+        const before = totals[r.player_id] || 0;
+        totals[r.player_id] = before + Number(r.total_amount);
+        console.log('[PokerTable][fetchTotals][rpc] accumulate', {
+          idx,
+          player_id: r.player_id,
+          total_amount: r.total_amount,
+          before,
+          after: totals[r.player_id]
+        });
+      });
+
+      // Diagnostics (unchanged logic conceptually)
+      const playerIds = players.map(p => p.id);
+      const totalKeys = Object.keys(totals);
+      const missingForPlayers = playerIds.filter(pid => !totalKeys.includes(pid));
+      if (missingForPlayers.length) {
+        console.warn('[PokerTable][fetchTotals][rpc] players missing totals (expected if zero buy-ins yet)', {
+          tableId: id,
+          missingForPlayers
+        });
+      }
+      const orphanTotals = totalKeys.filter(k => !playerIds.includes(k));
+      if (orphanTotals.length) {
+        console.warn('[PokerTable][fetchTotals][rpc] totals for non-loaded players', { orphanTotals });
+      }
+
+      prevTotalsRef.current = playerTotals;
+      setPlayerTotals(totals);
+      console.log('[PokerTable][fetchTotals][rpc] computed totals', totals);
+      setPlayers(prev => prev.map(p => ({ ...p, totalPoints: totals[p.id] ?? 0 })));
+      return totals;
     } catch (e) {
-      console.warn('[PokerTable] fetchTotals error (ignored):', e);
+      console.warn('[PokerTable][fetchTotals][rpc] exception', e);
+      return null;
     }
-    return null; // CHANGED (ensure null return on failure)
   };
 
   // New helper: ensure current profile has an active table_players row (with retries),
@@ -587,6 +642,23 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
           console.error('[PokerTable] buy_in_request_created handler error:', e);
         }
       })
+      // ADDED: listen for join request broadcasts (quick toast + refresh pending list)
+      .on('broadcast', { event: 'join_request_created' }, async (payload) => {
+        try {
+          const reqId = payload?.payload?.requestId;
+            if (!reqId) return;
+          const shownMap = shownJoinRequestIdsRef.current;
+          const prevTs = shownMap.get(reqId);
+          if (prevTs && (Date.now() - prevTs) < NOTIF_TTL_MS) return;
+          shownMap.set(reqId, Date.now());
+          toast('New join request', {
+            description: `${payload?.payload?.playerName || 'A player'} wants to join`
+          });
+          await fetchPendingJoinRequests(table.id);
+        } catch (e) {
+          console.warn('[PokerTable] join_request_created broadcast handler failed', e);
+        }
+      })
       .subscribe();
 
     return () => {
@@ -605,9 +677,12 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
         .select('player_id, amount, timestamp')
         .eq('table_id', id)
         .order('timestamp', { ascending: false });
-      if (!error && data) setHistoryData(data);
+      if (!error) {
+        setHistoryData(data || []);
+        console.log('[PokerTable][fetchBuyInHistory] loaded', { count: (data || []).length });
+      }
     } catch (e) {
-      console.warn('[PokerTable] fetchBuyInHistory failed (ignored):', e);
+      console.warn('[PokerTable][fetchBuyInHistory] error', e);
     }
   };
 
@@ -619,9 +694,19 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'buy_ins', filter: `table_id=eq.${table.id}` },
-        async () => {
+        async (payload) => {
+          const ts = new Date().toISOString();
+          console.log('[PokerTable][realtime][buy_ins] change received', {
+            tableId: table.id,
+            ts,
+            eventType: payload.eventType,
+            new: payload.new,
+            old: payload.old,
+            prevTotals: prevTotalsRef.current
+          });
           try {
             await refreshTableData(table.id, 'buy_ins change');
+            console.log('[PokerTable][realtime][buy_ins] post-refresh totals', playerTotals);
           } catch (e) {
             console.warn('[PokerTable] buy_ins realtime handler failed (ignored):', e);
           }
@@ -629,247 +714,268 @@ const PokerTable = ({ table, profile, refreshKey }: PokerTableProps) => {
       )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [table?.id]);
+  }, [table?.id, players]); // include players so missing players detection stays current
 
-  // Subscribe to broadcasts targeted at the current user for buy-in approval notifications
+  // NEW / EXTENDED: explicit broadcast channel so participants refresh (already existed for buy_in_updated)
   useEffect(() => {
-    if (!profile?.id || !table?.id) return;
-    const chan = supabase
-      .channel('user_' + profile.id)
-      .on('broadcast', { event: 'buy_in_approved' }, async (payload) => {
+    if (!table?.id) return;
+    const bc = supabase
+      .channel('table_' + table.id)
+      .on('broadcast', { event: 'buy_in_updated' }, async (payload) => {
+        console.log('[PokerTable][broadcast][buy_in_updated] received', payload);
         try {
-          const approvedTableId = payload?.payload?.tableId;
-            if (!approvedTableId || approvedTableId !== table.id) return;
-          await refreshTableData(table.id, 'buy_in_approved broadcast');
-          toast('Your buy-in was approved', { description: `Amount: ${payload?.payload?.amount ?? ''}` });
+          await refreshTableData(table.id, 'broadcast:buy_in_updated');
         } catch (e) {
-          console.error('[PokerTable] user-channel buy_in_approved handler error:', e);
+          console.warn('[PokerTable] broadcast buy_in_updated refresh failed', e);
+        }
+      })
+      // ADDED: join_refresh event to re-pull players & totals
+      .on('broadcast', { event: 'join_refresh' }, async (payload) => {
+        console.log('[PokerTable][broadcast][join_refresh] received', payload);
+        try {
+          await refreshTableData(table.id, 'broadcast:join_refresh');
+        } catch (e) {
+          console.warn('[PokerTable] broadcast join_refresh refresh failed', e);
         }
       })
       .subscribe();
-    return () => { supabase.removeChannel(chan); };
-  }, [profile?.id, table?.id]);
+    return () => { supabase.removeChannel(bc); };
+  }, [table?.id]);
 
-  // REMOVED: join_approved listener (now should live in parent Index.tsx to handle navigation when PokerTable is not yet mounted)
-  // useEffect(() => {
-  //   if (!profile?.id || !table?.id) return;
-  //   const chan = supabase
-  //     .channel('user_' + profile.id)
-  //     .on('broadcast', { event: 'join_approved' }, async (payload) => {
-  //       try {
-  //         const approvedTableId = payload?.payload?.tableId;
-  //         if (!approvedTableId || approvedTableId !== table.id) return;
-  //         toast('Your join request was approved!');
-  //         await refreshTableData(table.id, 'join_approved broadcast');
-  //       } catch (e) {
-  //         console.error('[PokerTable] user-channel join_approved handler error:', e);
-  //       }
-  //     })
-  //     .subscribe();
-  //   return () => { supabase.removeChannel(chan); };
-  // }, [profile?.id, table?.id]);
-
-  // Handler for exiting the game
-  const handleExitGame = async () => {
-    if (!table || !profile) return;
-    setProcessingExit(true);
-
-    // Fire-and-forget: perform DB updates in background so UI is not blocked by network latency/errors.
-    (async () => {
-      try {
-        // Mark current user inactive — use safe helper to avoid sending on_conflict in normal path
-        try {
-          await safeUpsertTablePlayer(table.id, profile.id, 'inactive');
-        } catch (e) {
-          console.warn('[PokerTable][background] marking inactive failed (ignored):', e);
-        }
-
-        // If admin, try to clear admin_player_id (best-effort)
-        if (isAdmin) {
-          try {
-            await supabase
-              .from('poker_tables')
-              .update({ admin_player_id: null })
-              .eq('id', table.id);
-          } catch (err) {
-            console.warn('[PokerTable][background] clearing admin_player_id failed (ignored):', err);
-          }
-        }
-
-        // Best-effort reconciliation in background
-        try { await loadPlayersFromJoinTable(table.id, playerTotals); } catch (err) { console.warn('[PokerTable][background] reload players failed (ignored):', err); } // CHANGED (pass playerTotals)
-        try { await fetchTotals(table.id); } catch (err) { /* ignore */ }
-      } catch (e) {
-        console.error('[PokerTable][background] reconciliation unexpected error (ignored):', e);
-      }
-    })();
-
-    // Immediately clear persisted table & navigate away so user sees selection quickly.
-    try { storage.setTable(null); } catch (e) { console.warn('[PokerTable] storage.setTable failed:', e); }
-    // local cleanup (component will unload after navigation)
-    setProcessingExit(false);
-    setOpenExit(false);
-    // Force navigation now (do not await background tasks)
-    window.location.replace('/');
-  };
+  // DIAG: log player list & totals correlation each time players or totals change
+  useEffect(() => {
+    const correlated = players.map(p => ({
+      id: p.id,
+      name: p.name,
+      active: p.active,
+      pending: p.pending,
+      totalPointsField: p.totalPoints,
+      totalFromMap: playerTotals[p.id] ?? 0
+    }));
+    console.log('[PokerTable][players/totals change]', {
+      tableId: table?.id,
+      correlated,
+      totalsKeys: Object.keys(playerTotals),
+      totalsRaw: playerTotals
+    });
+  }, [players, playerTotals]);
 
   // Handler to request a buy-in from a player (used by the Buy-in dialog)
   const handleRequestBuyIn = async () => {
-	// guard
-	if (!table || !profile) return;
+    if (!table || !profile) return;
+    console.log('[PokerTable][handleRequestBuyIn] submitting request', {
+      tableId: table.id,
+      playerId: profile.id,
+      amount
+    });
 
-	const buyInReq = {
-		id: uuidv4(),
-		table_id: table.id,
-		player_id: profile.id,
-		amount: parseFloat(amount || '0'),
-		status: 'pending',
-		created_at: new Date().toISOString()
-	};
+    const buyInReq = {
+      id: uuidv4(),
+      table_id: table.id,
+      player_id: profile.id,
+      amount: parseFloat(amount || '0'),
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
 
-	// insert request
-	try {
-		const { error } = await supabase.from('buy_in_requests').insert(buyInReq);
-		if (error) {
-			console.error('[PokerTable] Failed to insert buy_in_request:', error);
-			alert('Failed to request buy-in.');
-			return;
-		}
-	} catch (e) {
-		console.error('[PokerTable] Exception inserting buy_in_request (ignored):', e);
-		alert('Failed to request buy-in.');
-		return;
-	}
+    try {
+      const { error } = await supabase.from('buy_in_requests').insert(buyInReq);
+      if (error) {
+        console.error('[PokerTable] Failed to insert buy_in_request:', error);
+        toast.error('Failed to request buy-in.');
+        return;
+      }
+    } catch (e) {
+      console.error('[PokerTable] Exception inserting buy_in_request:', e);
+      toast.error('Failed to request buy-in.');
+      return;
+    }
 
-	// best-effort broadcast to admin so they get a fast notification (non-fatal)
-	try {
-		const adminId = table?.admin_player_id ?? (table as any)?.adminId;
-		if (adminId) {
-			await supabase
-				.channel('user_' + adminId)
-				.send({
-					type: 'broadcast',
-					event: 'buy_in_request_created',
-					payload: { requestId: buyInReq.id, playerName: profile?.name, tableId: table.id }
-				});
-		}
-	} catch (e) {
-		// ignore broadcast failures (realtime DB channel still works)
-		console.warn('[PokerTable] buy_in_request broadcast failed (ignored):', e);
-	}
+    // Notify admin (best-effort)
+    try {
+      const adminId = table?.admin_player_id ?? (table as any)?.adminId;
+      if (adminId) {
+        await supabase
+          .channel('user_' + adminId)
+          .send({
+            type: 'broadcast',
+            event: 'buy_in_request_created',
+            payload: { requestId: buyInReq.id, playerName: profile?.name, tableId: table.id }
+          });
+      }
+    } catch (e) {
+      console.warn('[PokerTable] buy_in_request broadcast failed (ignored):', e);
+    }
 
-	// If the requester is the admin, they may not receive their own broadcast.
-	// Refresh local pendingRequests and show a toast so admin sees the notification immediately.
-	if (isAdmin) {
-		try {
-			const { data: reqs, error: fetchErr } = await supabase
-				.from('buy_in_requests')
-				.select('*')
-				.eq('table_id', table.id)
-				.eq('status', 'pending');
-			if (!fetchErr) {
-				setPendingRequests(reqs || []);
-			}
-		} catch (e) {
-			console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
-		}
-		toast('New buy-in request', { description: `${profile?.name || 'You'} requested a buy-in` });
-	}
+    // Admin local refresh + admin-specific toast
+    if (isAdmin) {
+      try {
+        const { data: reqs, error: fetchErr } = await supabase
+          .from('buy_in_requests')
+          .select('*')
+          .eq('table_id', table.id)
+          .eq('status', 'pending');
+        if (!fetchErr) setPendingRequests(reqs || []);
+      } catch (e) {
+        console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
+      }
+      toast('New buy-in request', { description: `${profile?.name || 'You'} requested a buy-in` });
+    }
 
-	// close dialog and reset input
-	setOpenBuyIn(false);
-	setAmount('');
-	setPendingRequests(prev => prev); // keep UI stable; realtime will update pendingRequests
-};
+    // SUCCESS feedback for requester (admin or regular)
+    toast.success('Buy-in request sent', {
+      description: 'The table admin has been notified.'
+    });
+
+    setOpenBuyIn(false);
+    setAmount('');
+  };
 
 // Handler for requesting to join a table (regular players)
 const handleRequestJoin = async () => {
-	if (!table || !profile) return;
-	const playerId = profile.id;
-	try {
-		// Check if the player already has a table_players row (was ever part of the table)
-		const { data: tpRow } = await supabase
-			.from('table_players')
-			.select('id,status')
-			.eq('table_id', table.id)
-			.eq('player_id', playerId)
-			.maybeSingle();
+  const playerId = profile?.id;
+  if (!table?.id || !playerId) {
+    toast.error('Cannot join: missing table or profile info.');
+    console.error('[PokerTable.handleRequestJoin] Aborted: missing table or profile ID.', { tableId: table?.id, playerId });
+    return;
+  }
 
-		if (tpRow) {
-			// If already in table_players, just activate (no approval needed)
-			await safeUpsertTablePlayer(table.id, playerId, 'active');
-			// Immediately update totals and player list for all players
-			await fetchTotals(table.id);
-			await loadPlayersFromJoinTable(table.id, playerTotals);
-			toast('You have rejoined the table.');
-			return;
-		}
+  console.log(`[PokerTable.handleRequestJoin] User ${playerId} is requesting to join table ${table.id}.`);
 
-		// If there's already a pending join_request, update local pending state and exit.
-		const { data: existingReq } = await supabase
-			.from('join_requests')
-			.select('id,player_id,table_id,status,created_at')
-			.eq('table_id', table.id)
-			.eq('player_id', playerId)
-			.maybeSingle();
-		if (existingReq && existingReq.id) {
-			setPendingJoinPlayerIds(prev => {
-				const next = new Set(prev);
-				next.add(playerId);
-				return next;
-			});
-			setPendingJoinRequests(prev => {
-				if (prev.some(r => r.id === existingReq.id)) return prev;
-				return [...prev, { ...existingReq, player_name: profile.name }];
-			});
-			toast('Join request already pending');
-			return;
-		}
+  // Check if player is already in the table_players list
+  const { data: tpRow, error: tpError } = await supabase
+    .from('table_players')
+    .select('id, status')
+    .eq('table_id', table.id)
+    .eq('player_id', playerId)
+    .maybeSingle();
 
-		// Not in table_players: create join_request and notify admin
-		const reqId = uuidv4();
-		const newReq = {
-			id: reqId,
-			table_id: table.id,
-			player_id: playerId,
-			status: 'pending',
-			created_at: new Date().toISOString()
-		};
-		const { error: insertErr } = await supabase.from('join_requests').insert(newReq);
-		if (insertErr) {
-			console.error('[PokerTable] insert join_request failed:', insertErr);
-			toast('Failed to create join request');
-			return;
-		}
+  if (tpError) {
+    console.error('[PokerTable.handleRequestJoin] Error checking table_players:', tpError);
+    toast.error('Database error checking player status.');
+    return;
+  }
 
-		// Best-effort: notify admin so they get a quick UI prompt (non-fatal)
-		try {
-			const adminId = table?.admin_player_id;
-			if (adminId) {
-				await supabase
-					.channel('user_' + adminId)
-					.send({
-						type: 'broadcast',
-						event: 'join_request_created',
-						payload: { requestId: reqId, playerName: profile?.name, tableId: table.id }
-					});
-			}
-		} catch (e) {
-			console.warn('[PokerTable] join_request broadcast to admin failed (ignored):', e);
-		}
+  if (tpRow) {
+    console.log(`[PokerTable.handleRequestJoin] User ${playerId} is a returning player. Status: ${tpRow.status}. Activating.`);
+    // If already in table_players, just activate (no approval needed)
+    await safeUpsertTablePlayer(table.id, playerId, 'active');
+    await refreshTableData(table.id, 'rejoin');
+    // broadcast so other clients see the player list update
+    try {
+      await supabase.channel('table_' + table.id).send({
+        type: 'broadcast',
+        event: 'join_refresh',
+        payload: { rejoinedPlayer: playerId }
+      });
+    } catch (e) { console.warn('[PokerTable] rejoin broadcast failed', e); }
+    toast('You have rejoined the table.');
+    return;
+  }
 
-		// Update local pending markers so UI shows the pending state immediately
-		setPendingJoinPlayerIds(prev => {
-			const next = new Set(prev);
-			next.add(playerId);
-			return next;
-		});
-		setPendingJoinRequests(prev => [...prev, { ...newReq, player_name: profile.name }]);
-		toast('Join request sent');
-	} catch (e) {
-		console.error('[PokerTable] handleRequestJoin error:', e);
-		toast('Failed to send join request');
-	}
+  console.log(`[PokerTable.handleRequestJoin] User ${playerId} is a new player for this table. Checking for existing requests.`);
+
+  // If there's already a pending join_request, update local pending state and exit.
+  const { data: existingReq, error: existingReqError } = await supabase
+    .from('join_requests')
+    .select('id, status')
+    .eq('table_id', table.id)
+    .eq('player_id', playerId)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (existingReqError) {
+    console.error('[PokerTable.handleRequestJoin] Error checking existing join_requests:', existingReqError);
+    toast.error('Database error checking join requests.');
+    return;
+  }
+
+  if (existingReq) {
+    console.log(`[PokerTable.handleRequestJoin] User ${playerId} already has a pending request (ID: ${existingReq.id}). Not creating a new one.`);
+    setPendingJoinPlayerIds(prev => new Set(prev).add(playerId));
+    toast('Your join request is still pending.');
+    return;
+  }
+
+  console.log(`[PokerTable.handleRequestJoin] No pending request found for user ${playerId}. Creating a new join request.`);
+
+  // Create a new join request
+  try {
+    const newRequestId = uuidv4();
+    const { error: insertError } = await supabase
+      .from('join_requests')
+      .insert({
+        id: newRequestId,
+        table_id: table.id,
+        player_id: playerId,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
+    if (insertError) {
+      console.error('[PokerTable] insert join_request failed:', insertError);
+      toast('Failed to create join request');
+      return;
+    }
+
+    // Best-effort: notify admin so they get a quick UI prompt (non-fatal)
+    try {
+      const adminId = normalizedAdminId; // CHANGED: use normalized admin id (handles camelCase)
+      if (adminId) {
+        await supabase
+          .channel('user_' + adminId)
+          .send({
+            type: 'broadcast',
+            event: 'join_request_created',
+            payload: { requestId: newRequestId, playerName: profile?.name, tableId: table.id }
+          });
+      }
+    } catch (e) {
+      console.warn('[PokerTable] join_request broadcast to admin failed (ignored):', e);
+    }
+
+    // Update local pending markers so UI shows the pending state immediately
+    setPendingJoinPlayerIds(prev => {
+      const next = new Set(prev);
+      next.add(playerId);
+      return next;
+    });
+    setPendingJoinRequests(prev => [...prev, { id: newRequestId, player_id: playerId, player_name: profile.name }]);
+    toast('Join request sent');
+  } catch (e) {
+    console.error('[PokerTable] handleRequestJoin error:', e);
+    toast('Failed to send join request');
+  }
+};
+
+// ADDED: handle player exiting the game
+const handleExitGame = async () => {
+  if (!table?.id || !profile?.id) return;
+  setProcessingExit(true);
+  try {
+    // Set player status to inactive in the table_players table
+    await supabase
+      .from('table_players')
+      .update({ status: 'inactive' })
+      .match({ table_id: table.id, player_id: profile.id });
+
+    // Broadcast a refresh event so other players see the change
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'join_refresh',
+        payload: { exitedPlayer: profile.id }
+      });
+
+    // Clear local state and navigate away by calling the onExit prop
+    onExit();
+    toast('You have left the table.');
+  } catch (error) {
+    console.error('Error exiting game:', error);
+    toast.error('Failed to exit table. Please try again.');
+  } finally {
+    setProcessingExit(false);
+  }
 };
 
 // ---------------------- Inserted helpers & admin handlers ----------------------
@@ -922,116 +1028,65 @@ const safeUpsertTablePlayer = async (tableId: string, playerId: string, status: 
 // Lightweight loader for players joined to a table (used by many hooks)
 // Keeps behaviour simple: load table_players rows then player profiles and setPlayers.
 const loadPlayersFromJoinTable = async (tableId: string, totals: Record<string, number>) => {
+  console.log('[PokerTable][loadPlayersFromJoinTable] start', { tableId });
   if (!tableId) return;
   try {
-    // retry the table_players lookup when transient/access-control errors occur
-    const joinRes = await retryQuery(() =>
-      supabase
-        .from('table_players')
-        .select('player_id,status')
-        .eq('table_id', tableId)
+    const joinRes: any = await retryQuery(() =>
+      supabase.from('table_players').select('player_id,status').eq('table_id', tableId)
     );
-    const { data: joinRows, error: joinErr } = joinRes as any;
-    if (joinErr) {
-      console.warn('[PokerTable] loadPlayersFromJoinTable: table_players lookup failed (ignored):', joinErr);
-      return;
-    }
-    const ids = Array.from(new Set((joinRows || []).map((r: any) => r.player_id).filter(Boolean)));
+    const joinRows = joinRes.data || [];
+    const ids = Array.from(new Set(joinRows.map((r: any) => r.player_id).filter(Boolean)));
     if (ids.length === 0) {
       setPlayers([]);
+      console.log('[PokerTable][loadPlayersFromJoinTable] no players');
       return;
     }
-
-    // retry players lookup too
-    const playersRes = await retryQuery(() =>
-      supabase
-        .from('players')
-        .select('id,name')
-        .in('id', ids)
-    );
-    const { data: playersData, error: playersErr } = playersRes as any;
-    if (playersErr) {
-      console.warn('[PokerTable] loadPlayersFromJoinTable: players lookup failed (ignored):', playersErr);
-      return;
-    }
-    const statusById: Record<string, string | undefined> = {};
-    (joinRows || []).forEach((r: any) => { if (r.player_id) statusById[r.player_id] = r.status; });
-    const nextPlayers: TablePlayer[] = (playersData || []).map((p: any) => {
-      const status = statusById[p.id];
-      const hasPending = pendingJoinPlayerIds.has(p.id);
-      const isActiveByDb = status === 'active' || (status === undefined && !hasPending);
-      return {
-        id: p.id,
-        name: p.name,
-        totalPoints: totals[p.id] ?? 0,
-        active: !!isActiveByDb,
-        pending: !isActiveByDb && hasPending
-      };
-    });
+    const playersRes: any = await retryQuery(() => supabase.from('players').select('id,name').in('id', ids));
+    const playersData = playersRes.data || [];
+    const statusById: Record<string, string> = {};
+    joinRows.forEach((r: any) => { statusById[r.player_id] = r.status; });
+    const nextPlayers: TablePlayer[] = playersData.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      totalPoints: totals[p.id] ?? 0,
+      active: statusById[p.id] === 'active',
+      pending: pendingJoinPlayerIds.has(p.id)
+    }));
+    console.log('[PokerTable][loadPlayersFromJoinTable] built player list', nextPlayers);
     setPlayers(nextPlayers);
   } catch (e) {
-    console.error('[PokerTable] loadPlayersFromJoinTable unexpected error (ignored):', e);
+    console.error('[PokerTable][loadPlayersFromJoinTable] error', e);
   }
 };
 
 // Admin handlers for buy-in requests
 const handleApprove = async (reqId: string) => {
+  console.log('[PokerTable][handleApprove] start', { reqId, tableId: table?.id });
   if (!reqId || processingRequests.includes(reqId) || !table) return;
   setProcessingRequests(prev => [...prev, reqId]);
   try {
-    const { data: reqRow } = await supabase
-      .from('buy_in_requests')
-      .select('*')
-      .eq('id', reqId)
-      .maybeSingle();
-    const req = (reqRow as any) || null;
-    if (!req) throw new Error('buy_in_request not found');
+    const { data, error } = await supabase.rpc('approve_buy_in', { p_request_id: reqId });
+    if (error) {
+      console.error('[PokerTable][handleApprove] RPC error', error);
+      throw error;
+    }
+    console.log('[PokerTable][handleApprove] RPC inserted buy_in id', data);
 
-    await supabase.from('buy_ins').insert({
-      id: uuidv4(),
-      table_id: table.id,
-      player_id: req.player_id,
-      amount: req.amount,
-      timestamp: new Date().toISOString()
-    });
+    setPendingRequests(prev => prev.filter(r => r.id !== reqId));
 
-    await supabase.from('buy_in_requests').delete().eq('id', reqId);
+    await refreshTableData(table.id, 'handleApprove (rpc)');
 
-    // Central refresh (ensures totals + history + players + admin)
-    await refreshTableData(table.id, 'handleApprove');
-
-    // reload pending (best-effort)
-    try {
-      const { data } = await supabase
-        .from('buy_in_requests')
-        .select('*')
-        .eq('table_id', table.id)
-        .eq('status', 'pending');
-      setPendingRequests(data || []);
-    } catch { /* ignore */ }
-
-    // notify requesting player
-    try {
-      await supabase
-        .channel('user_' + req.player_id)
-        .send({
-          type: 'broadcast',
-            event: 'buy_in_approved',
-            payload: { tableId: table.id, amount: req.amount }
-        });
-    } catch { /* ignore */ }
-
-    // NEW: broadcast to all table participants
+    // NEW: broadcast to table participants (regular users listen and refresh)
     try {
       await supabase
         .channel('table_' + table.id)
         .send({
           type: 'broadcast',
           event: 'buy_in_updated',
-          payload: { by: profile?.id, amount: req.amount }
+          payload: { by: profile?.id, buyInId: data }
         });
     } catch (e) {
-      console.warn('[PokerTable] table-wide buy_in_updated broadcast failed (ignored):', e);
+      console.warn('[PokerTable][handleApprove] broadcast failed (ignored)', e);
     }
 
     toast('Buy-in approved');
@@ -1117,6 +1172,18 @@ const handleApproveJoin = async (reqId: string) => {
     }
 
     toast('Join request approved');
+    // ADDED: broadcast lightweight join refresh event so all clients refresh players/totals quickly
+    try {
+      await supabase
+        .channel('table_' + table.id)
+        .send({
+          type: 'broadcast',
+          event: 'join_refresh',
+          payload: { approvedPlayer: playerId }
+        });
+    } catch (e) {
+      console.warn('[PokerTable] join_refresh broadcast failed (ignored)', e);
+    }
   } catch (e) {
     console.error('[PokerTable] handleApproveJoin error:', e);
     toast('Failed to approve join request');
@@ -1191,334 +1258,364 @@ return (
           </CardTitle>
           <CardDescription>
             Join Code: {normalizedJoinCode} <br />
-            Admin: {adminName || 'Loading...'}
+            {/* FIX: Add parentheses to clarify operator precedence */}
+            Admin: {(table.adminName ?? adminName) || 'Loading...'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Buy-in request section */}
-          <div className="mb-6 flex gap-2 items-center flex-wrap">
-            {/* Buy-in request button (always visible) */}
-            <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="hero"
-                  className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 transition-all"
-                >
-                  <span role="img" aria-label="buy-in">💸</span>
-                  Buy-in
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Request Buy-in</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount (can be positive or negative)</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                  />
-                </div>
-                <DialogFooter>
-                  <Button onClick={handleRequestBuyIn}>Submit</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+          {/* ADDED: Show "Request to Join" button if not a player and not pending */}
+          {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
+            <div className="mb-6 p-4 border rounded-lg bg-blue-50 border-blue-200">
+              <h3 className="font-semibold text-lg mb-2">You are viewing this table as a spectator.</h3>
+              <p className="text-sm text-muted-foreground mb-4">To participate, request to join. The admin will need to approve your request.</p>
+              <Button onClick={handleRequestJoin} className="w-full" variant="hero">
+                <span role="img" aria-label="join">👋</span> Request to Join Table
+              </Button>
+            </div>
+          )}
 
-            {/* History button (always visible, comes after buy-in request) */}
-            <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
-              <HistoryDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-none flex items-center gap-1 transition-all"
-                >
-                  <span role="img" aria-label="history">📜</span>
-                  History
-                </Button>
-              </HistoryDialogTrigger>
-              <HistoryDialogContent style={{ minWidth: 350, maxWidth: 600 }}>
-                <HistoryDialogHeader>
-                  <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
-                </HistoryDialogHeader>
-                <div style={{
-                  fontSize: '11px',
-                  overflowX: 'auto',
-                  maxHeight: '60vh'
-                }}>
-                  <UITable>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead style={{ minWidth: 60, padding: '2px 4px' }}>Player</TableHead>
-                        {(() => {
-                          const playerBuyIns = players.map((p: any) =>
-                            historyData.filter((row: any) => row.player_id === p.id)
-                          );
-                          const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                          return Array.from({ length: maxBuyIns }).map((_, idx) => (
-                            <TableHead key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
-                              {idx + 1}
-                            </TableHead>
-                          ));
-                        })()}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {players.map((p: any) => {
-                        const buyIns = historyData
-                          .filter((row: any) => row.player_id === p.id)
-                          .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                        return (
-                          <TableRow key={p.id}>
-                            <TableCell style={{ minWidth: 60, padding: '2px 4px' }}>{p.name}</TableCell>
-                            {buyIns.map((row: any, idx: number) => (
-                              <TableCell key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
-                                {parseInt(row.amount, 10)}
-                              </TableCell>
-                            ))}
-                            {Array.from({ length: Math.max(0, (() => {
-                              const playerBuyIns = players.map((pl: any) =>
-                                historyData.filter((row: any) => row.player_id === pl.id)
+          {/* Show main content only if the user is a player on the table */}
+          {isPlayerOnTable && (
+            <>
+              {/* Buy-in request section */}
+              <div className="mb-6 flex gap-2 items-center flex-wrap">
+                {/* Buy-in request button (always visible) */}
+                <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="hero"
+                      className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 transition-all"
+                    >
+                      <span role="img" aria-label="buy-in">💸</span>
+                      Buy-in
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Request Buy-in</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                      <Label htmlFor="amount">Amount (can be positive or negative)</Label>
+                      <Input
+                        id="amount"
+                        type="number"
+                        inputMode="decimal"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                      />
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={handleRequestBuyIn}>Submit</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* History button (always visible, comes after buy-in request) */}
+                <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
+                  <HistoryDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-none flex items-center gap-1 transition-all"
+                    >
+                      <span role="img" aria-label="history">📜</span>
+                      History
+                    </Button>
+                  </HistoryDialogTrigger>
+                  <HistoryDialogContent style={{ minWidth: 350, maxWidth: 600 }}>
+                    <HistoryDialogHeader>
+                      <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
+                    </HistoryDialogHeader>
+                    <div style={{
+                      fontSize: '11px',
+                      overflowX: 'auto',
+                      maxHeight: '60vh'
+                    }}>
+                      <UITable>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead style={{ minWidth: 60, padding: '2px 4px' }}>Player</TableHead>
+                            {(() => {
+                              const playerBuyIns = players.map((p: any) =>
+                                historyData.filter((row: any) => row.player_id === p.id)
                               );
                               const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                              return maxBuyIns - buyIns.length;
-                            })()) }).map((_, idx) => (
-                              <TableCell key={`empty-${idx}`} style={{ minWidth: 40, padding: '2px 4px' }}></TableCell>
-                            ))}
+                              return Array.from({ length: maxBuyIns }).map((_, idx) => (
+                                <TableHead key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
+                                  {idx + 1}
+                                </TableHead>
+                              ));
+                            })()}
                           </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {players.map((p: any) => {
+                            const buyIns = historyData
+                              .filter((row: any) => row.player_id === p.id)
+                              .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                            return (
+                              <TableRow key={p.id}>
+                                <TableCell style={{ minWidth: 60, padding: '2px 4px' }}>{p.name}</TableCell>
+                                {buyIns.map((row: any, idx: number) => (
+                                  <TableCell key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
+                                    {parseInt(row.amount, 10)}
+                                  </TableCell>
+                                ))}
+                                {Array.from({ length: Math.max(0, (() => {
+                                  const playerBuyIns = players.map((pl: any) =>
+                                    historyData.filter((row: any) => row.player_id === pl.id)
+                                  );
+                                  const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
+                                  return maxBuyIns - buyIns.length;
+                                })()) }).map((_, idx) => (
+                                  <TableCell key={`empty-${idx}`} style={{ minWidth: 40, padding: '2px 4px' }}></TableCell>
+                                ))}
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </UITable>
+                    </div>
+                    <HistoryDialogFooter>
+                      <Button variant="secondary" onClick={() => setOpenHistory(false)}>Close</Button>
+                    </HistoryDialogFooter>
+                  </HistoryDialogContent>
+                </HistoryDialog>
+
+                {/* End Up button (only visible for admin, comes after history) */}
+                {(() => { 
+                  if (!isAdmin) {
+                    console.log('[PokerTable.UI] End Up hidden (isAdmin=false)', {
+                      profileId: profile?.id,
+                      normalizedAdminId
+                    });
+                  } else {
+                    console.log('[PokerTable.UI] End Up visible (admin confirmed)', {
+                      profileId: profile?.id,
+                      normalizedAdminId
+                    });
+                  }
+                  return isAdmin;
+                })() && (
+                  <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-purple-600 hover:bg-purple-700 text-white border-none flex items-center gap-1 transition-all"
+                      >
+                        <span role="img" aria-label="end-up">🏁</span>
+                        End Up
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent style={{
+                      minWidth: 320,
+                      maxWidth: '100vw',
+                      padding: '8px',
+                      overflowX: 'auto'
+                    }}>
+                      <DialogHeader>
+                        <DialogTitle>End Up Game</DialogTitle>
+                      </DialogHeader>
+                      <div style={{
+                        fontSize: '10px',
+                        maxHeight: '60vh',
+                        overflowX: 'auto',
+                        padding: '0'
+                      }}>
+                        <UITable>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead style={{
+                                minWidth: 50,
+                                padding: '2px 2px',
+                                fontSize: '10px'
+                              }}>Player</TableHead>
+                              <TableHead style={{
+                                minWidth: 40,
+                                padding: '2px 2px',
+                                textAlign: 'center',
+                                fontSize: '10px'
+                              }}>Total Buy-ins</TableHead>
+                              <TableHead style={{
+                                minWidth: 40,
+                                padding: '2px 2px',
+                                textAlign: 'center',
+                                fontSize: '10px'
+                              }}>End Up</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {Array.isArray(players) && players.map((p: any) => (
+                              <TableRow key={p.id}>
+                                <TableCell style={{
+                                  minWidth: 50,
+                                  padding: '2px 2px',
+                                  fontSize: '10px'
+                                }}>{p.name}</TableCell>
+                                <TableCell style={{
+                                  minWidth: 40,
+                                  padding: '2px 2px',
+                                  textAlign: 'center',
+                                  fontSize: '10px'
+                                }}>
+                                  {parseInt(String(playerTotals[p.id] ?? 0), 10)}
+                                </TableCell>
+                                <TableCell style={{
+                                  minWidth: 40,
+                                  padding: '2px 2px',
+                                  textAlign: 'center',
+                                  fontSize: '10px'
+                                }}>
+                                  <Input
+                                    type="number"
+                                    style={{
+                                      width: 40,
+                                      fontSize: '10px',
+                                      padding: '2px 2px',
+                                      textAlign: 'center'
+                                    }}
+                                    value={endUpValues[p.id] ?? ''}
+                                    onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {/* Totals row */}
+                            <TableRow className="font-bold border-t">
+                              <TableCell style={{ fontSize: '10px' }}>Total</TableCell>
+                              <TableCell style={{
+                                textAlign: 'center',
+                                fontSize: '10px'
+                              }}>
+                                {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                              </TableCell>
+                              <TableCell style={{
+                                textAlign: 'center',
+                                fontSize: '10px'
+                              }}>
+                                {Object.values(endUpValues).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </UITable>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+              {/* Admin notification and approval UI */}
+              {isAdmin && pendingRequests.length > 0 && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle>Pending Buy-in Requests</CardTitle>
+                    <CardDescription>Approve or reject buy-in requests below.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {pendingRequests.map((r) => (
+                        <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
+                          <div>
+                            <div className="font-medium">
+                              {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {`${r.amount >= 0 ? '+' : ''}$${r.amount.toFixed(2)}`}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApprove(r.id)}
+                              disabled={processingRequests.includes(r.id)}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleReject(r.id)}
+                              disabled={processingRequests.includes(r.id)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {/* Admin notification and approval UI for join requests */}
+              {isAdmin && pendingJoinRequests.length > 0 && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle>Pending Join Requests</CardTitle>
+                    <CardDescription>Approve or reject player join requests below.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {pendingJoinRequests.map((r) => {
+                        // Show only player name, hide player ID
+                        const playerObj = players.find((p: any) => p.id === r.player_id);
+                        const displayName = playerObj?.name || r.player_name || '';
+                        return (
+                          <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
+                            <div>
+                              <div className="font-medium">
+                                {displayName}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                Join request
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                onClick={() => handleApproveJoin(r.id)}
+                                disabled={processingJoinRequests.includes(r.id)}
+                              >
+                                Approve
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={() => handleRejectJoin(r.id)}
+                                disabled={processingJoinRequests.includes(r.id)}
+                              >
+                                Reject
+                              </Button>
+                            </div>
+                          </div>
                         );
                       })}
-                    </TableBody>
-                  </UITable>
-                </div>
-                <HistoryDialogFooter>
-                  <Button variant="secondary" onClick={() => setOpenHistory(false)}>Close</Button>
-                </HistoryDialogFooter>
-              </HistoryDialogContent>
-            </HistoryDialog>
-
-            {/* End Up button (only visible for admin, comes after history) */}
-            {isAdmin && (
-              <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-purple-600 hover:bg-purple-700 text-white border-none flex items-center gap-1 transition-all"
-                  >
-                    <span role="img" aria-label="end-up">🏁</span>
-                    End Up
-                  </Button>
-                </DialogTrigger>
-                <DialogContent style={{
-                  minWidth: 320,
-                  maxWidth: '100vw',
-                  padding: '8px',
-                  overflowX: 'auto'
-                }}>
-                  <DialogHeader>
-                    <DialogTitle>End Up Game</DialogTitle>
-                  </DialogHeader>
-                  <div style={{
-                    fontSize: '10px',
-                    maxHeight: '60vh',
-                    overflowX: 'auto',
-                    padding: '0'
-                  }}>
-                    <UITable>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead style={{
-                            minWidth: 50,
-                            padding: '2px 2px',
-                            fontSize: '10px'
-                          }}>Player</TableHead>
-                          <TableHead style={{
-                            minWidth: 40,
-                            padding: '2px 2px',
-                            textAlign: 'center',
-                            fontSize: '10px'
-                          }}>Total Buy-ins</TableHead>
-                          <TableHead style={{
-                            minWidth: 40,
-                            padding: '2px 2px',
-                            textAlign: 'center',
-                            fontSize: '10px'
-                          }}>End Up</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {Array.isArray(players) && players.map((p: any) => (
-                          <TableRow key={p.id}>
-                            <TableCell style={{
-                              minWidth: 50,
-                              padding: '2px 2px',
-                              fontSize: '10px'
-                            }}>{p.name}</TableCell>
-                            <TableCell style={{
-                              minWidth: 40,
-                              padding: '2px 2px',
-                              textAlign: 'center',
-                              fontSize: '10px'
-                            }}>
-                              {parseInt(String(playerTotals[p.id] ?? 0), 10)}
-                            </TableCell>
-                            <TableCell style={{
-                              minWidth: 40,
-                              padding: '2px 2px',
-                              textAlign: 'center',
-                              fontSize: '10px'
-                            }}>
-                              <Input
-                                type="number"
-                                style={{
-                                  width: 40,
-                                  fontSize: '10px',
-                                  padding: '2px 2px',
-                                  textAlign: 'center'
-                                }}
-                                value={endUpValues[p.id] ?? ''}
-                                onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {/* Totals row */}
-                        <TableRow className="font-bold border-t">
-                          <TableCell style={{ fontSize: '10px' }}>Total</TableCell>
-                          <TableCell style={{
-                            textAlign: 'center',
-                            fontSize: '10px'
-                          }}>
-                            {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
-                          </TableCell>
-                          <TableCell style={{
-                            textAlign: 'center',
-                            fontSize: '10px'
-                          }}>
-                            {Object.values(endUpValues).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </UITable>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-          {/* Admin notification and approval UI */}
-          {isAdmin && pendingRequests.length > 0 && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Pending Buy-in Requests</CardTitle>
-                <CardDescription>Approve or reject buy-in requests below.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {pendingRequests.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
-                      <div>
-                        <div className="font-medium">
-                          {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {`${r.amount >= 0 ? '+' : ''}$${r.amount.toFixed(2)}`}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleApprove(r.id)}
-                          disabled={processingRequests.includes(r.id)}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleReject(r.id)}
-                          disabled={processingRequests.includes(r.id)}
-                        >
-                          Reject
-                        </Button>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              )}
+              {/* Player totals table */}
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle>Total Buy-ins</CardTitle>
+                  <CardDescription>
+                    Your total approved buy-ins for this table.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Show only the current user's total buy-ins */}
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <div className="text-xl font-bold">
+                      ${playerTotals[profile?.id]?.toFixed(2) || '0.00'}
+                    </div>
+                    <div className="text-muted-foreground mt-2">
+                      Player: {profile?.name}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
           )}
-          {/* Admin notification and approval UI for join requests */}
-          {isAdmin && pendingJoinRequests.length > 0 && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Pending Join Requests</CardTitle>
-                <CardDescription>Approve or reject player join requests below.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {pendingJoinRequests.map((r) => {
-                    // Show only player name, hide player ID
-                    const playerObj = players.find((p: any) => p.id === r.player_id);
-                    const displayName = playerObj?.name || r.player_name || '';
-                    return (
-                      <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
-                        <div>
-                          <div className="font-medium">
-                            {displayName}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Join request
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            onClick={() => handleApproveJoin(r.id)}
-                            disabled={processingJoinRequests.includes(r.id)}
-                          >
-                            Approve
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => handleRejectJoin(r.id)}
-                            disabled={processingJoinRequests.includes(r.id)}
-                          >
-                            Reject
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {/* Player totals table */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Total Buy-ins</CardTitle>
-              <CardDescription>
-                Your total approved buy-ins for this table.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Show only the current user's total buy-ins */}
-              <div className="flex flex-col items-center justify-center py-4">
-                <div className="text-xl font-bold">
-                  ${playerTotals[profile?.id]?.toFixed(2) || '0.00'}
-                </div>
-                <div className="text-muted-foreground mt-2">
-                  Player: {profile?.name}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           <UITable>
             <TableHeader>
