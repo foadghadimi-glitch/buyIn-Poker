@@ -216,49 +216,63 @@ const TableSelection = ({
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="space-y-8">
-        <Card className="w-full max-w-md">
+    <div
+      className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-center bg-cover"
+      style={{ backgroundImage: "url('/Poker_05.png')" }}
+    >
+      {/* Overlay to darken the background image */}
+      <div className="absolute inset-0 bg-black/40"></div>
+
+      <div className="space-y-8 w-full max-w-md relative z-10">
+        <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
           <CardHeader>
-            <CardTitle>Create a New Table</CardTitle>
-            <CardDescription>Set up a new table and invite your friends.</CardDescription>
+            <CardTitle className="text-white text-center text-2xl">Create a New Poker Table</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="tableName">Table Name</Label>
+            <div className="space-y-4">
+              <Label htmlFor="tableName" className="text-lg font-semibold text-gray-200">Table Name</Label>
               <Input
                 id="tableName"
                 placeholder="e.g., Friday Night Poker"
                 value={tableName}
                 onChange={(e) => setTableName(e.target.value)}
+                className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
               />
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleCreate} disabled={isCreating} className="w-full">
+            <Button 
+              onClick={handleCreate} 
+              disabled={isCreating} 
+              className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 text-white"
+            >
               {isCreating ? 'Creating...' : 'Create Table'}
             </Button>
           </CardFooter>
         </Card>
 
-        <Card className="w-full max-w-md">
+        <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
           <CardHeader>
-            <CardTitle>Join a Table</CardTitle>
-            <CardDescription>Enter the join code provided by the table admin.</CardDescription>
+            <CardTitle className="text-white text-center text-2xl">Join a Poker Table</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="joinCode">Join Code</Label>
+            <div className="space-y-4">
+              <Label htmlFor="joinCode" className="text-lg font-semibold text-gray-200">Join Code</Label>
               <Input
                 id="joinCode"
-                placeholder="e.g., 1234"
+                placeholder="1234"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
+                className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-mono"
               />
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleJoin} disabled={isJoining || waitingApproval} className="w-full">
+            <Button 
+              onClick={handleJoin} 
+              disabled={isJoining || waitingApproval} 
+              className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white"
+            >
               {isJoining ? 'Joining...' : 'Join Table'}
             </Button>
           </CardFooter>
@@ -266,15 +280,14 @@ const TableSelection = ({
 
         {/* ADDED: Display this card when waiting for approval, instead of navigating away */}
         {waitingApproval && (
-          <Card className="w-full max-w-md bg-blue-50 border-blue-200">
+          <Card className="bg-yellow-900/30 backdrop-blur-md border border-yellow-400/50 text-white shadow-2xl">
             <CardHeader>
-              <CardTitle>Request Sent</CardTitle>
-              <CardDescription>Your request to join the table has been sent to the admin.</CardDescription>
+              <CardTitle className="text-yellow-300 text-center">Request Sent</CardTitle>
+              <CardDescription className="text-yellow-200 text-center">Waiting for admin approval.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center p-4">
-                <div className="text-lg font-semibold">Waiting for approval...</div>
-                <div className="mt-2 text-sm text-muted-foreground">You will be automatically redirected once approved.</div>
+                <div className="text-lg font-semibold text-yellow-100">You will be redirected once approved.</div>
               </div>
             </CardContent>
           </Card>

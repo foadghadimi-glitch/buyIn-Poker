@@ -127,6 +127,10 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
   const [processingExit, setProcessingExit] = useState(false);
   const [adminName, setAdminName] = useState<string>('');
 
+  const handleEndUpChange = (playerId: string, value: number) => {
+    setEndUpValues(prev => ({ ...prev, [playerId]: value }));
+  };
+
   // NEW: fetch admin name (used by refreshTableData + fallback effect)
   const fetchAdminName = async (tableId: string) => {
     try {
@@ -1250,24 +1254,30 @@ const handleRejectJoin = async (reqId: string) => {
 };
 
 return (
-    <div className="min-h-screen bg-gradient-page flex items-center justify-center p-6">
-      <Card className="w-full max-w-2xl shadow-elegant">
+    <div
+      className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-cover"
+      style={{
+        backgroundImage: "url('/Poker_06.png')",
+        backgroundPosition: 'center 85%', // Explicitly shifts the image up. Adjust 85% to fine-tune.
+      }}
+    >
+      <Card className="w-full max-w-2xl bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="text-white">
             Poker Table: {table.name || normalizedJoinCode}
           </CardTitle>
-          <CardDescription>
-            Join Code: {normalizedJoinCode} <br />
+          <CardDescription className="text-gray-300">
+            Join Code: <span className="font-bold text-yellow-300">{normalizedJoinCode}</span> <br />
             {/* FIX: Add parentheses to clarify operator precedence */}
-            Admin: {(table.adminName ?? adminName) || 'Loading...'}
+            Admin: <span className="font-semibold text-white">{(table.adminName ?? adminName) || 'Loading...'}</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
           {/* ADDED: Show "Request to Join" button if not a player and not pending */}
           {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
-            <div className="mb-6 p-4 border rounded-lg bg-blue-50 border-blue-200">
-              <h3 className="font-semibold text-lg mb-2">You are viewing this table as a spectator.</h3>
-              <p className="text-sm text-muted-foreground mb-4">To participate, request to join. The admin will need to approve your request.</p>
+            <div className="mb-6 p-4 border rounded-lg bg-black/50 border-blue-400/50">
+              <h3 className="font-semibold text-lg mb-2 text-white">You are viewing this table as a spectator.</h3>
+              <p className="text-sm text-gray-300 mb-4">To participate, request to join. The admin will need to approve your request.</p>
               <Button onClick={handleRequestJoin} className="w-full" variant="hero">
                 <span role="img" aria-label="join">👋</span> Request to Join Table
               </Button>
@@ -1290,7 +1300,7 @@ return (
                       Buy-in
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
                     <DialogHeader>
                       <DialogTitle>Request Buy-in</DialogTitle>
                     </DialogHeader>
@@ -1302,6 +1312,7 @@ return (
                         inputMode="decimal"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
+                        className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
                       />
                     </div>
                     <DialogFooter>
@@ -1321,13 +1332,17 @@ return (
                       History
                     </Button>
                   </HistoryDialogTrigger>
-                  <HistoryDialogContent style={{ minWidth: 350, maxWidth: 600 }}>
+                  <HistoryDialogContent
+                    className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
+                    style={{ minWidth: 350, maxWidth: 600 }}
+                  >
                     <HistoryDialogHeader>
                       <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
                     </HistoryDialogHeader>
                     <div style={{
                       fontSize: '11px',
                       overflowX: 'auto',
+                      overflowY: 'auto',
                       maxHeight: '60vh'
                     }}>
                       <UITable>
@@ -1406,72 +1421,91 @@ return (
                         End Up
                       </Button>
                     </DialogTrigger>
-                    <DialogContent style={{
-                      minWidth: 320,
-                      maxWidth: '100vw',
-                      padding: '8px',
-                      overflowX: 'auto'
-                    }}>
+                    <DialogContent
+                      className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
+                      style={{
+                        display: 'inline-block',
+                        padding: '4px',
+                        minHeight: '700px',
+                        maxHeight: '100vh'
+                      }}
+                    >
                       <DialogHeader>
                         <DialogTitle>End Up Game</DialogTitle>
                       </DialogHeader>
-                      <div style={{
-                        fontSize: '10px',
-                        maxHeight: '60vh',
-                        overflowX: 'auto',
-                        padding: '0'
-                      }}>
-                        <UITable>
+                      <div
+                        style={{
+                          fontSize: '10px',
+                          height: '600px', // Increased height for the table container
+                          maxHeight: '80vh', // Increased maxHeight for the table container
+                          overflowX: 'auto',
+                          overflowY: 'auto',
+                          padding: '0'
+                        }}
+                      >
+                        <UITable style={{ width: 'auto', height: '100%' }}>
                           <TableHeader>
-                            <TableRow>
-                              <TableHead style={{
-                                minWidth: 50,
-                                padding: '2px 2px',
-                                fontSize: '10px'
+                            <TableRow className="border-b-white/20">
+                              <TableHead className="text-white" style={{
+                                minWidth: '100px',
+                                padding: '4px',
+                                fontSize: '11px',
+                                whiteSpace: 'nowrap',
                               }}>Player</TableHead>
-                              <TableHead style={{
-                                minWidth: 40,
-                                padding: '2px 2px',
+                              <TableHead className="text-white" style={{
+                                minWidth: '80px',
+                                padding: '4px',
                                 textAlign: 'center',
-                                fontSize: '10px'
+                                fontSize: '11px',
+                                whiteSpace: 'nowrap',
                               }}>Total Buy-ins</TableHead>
-                              <TableHead style={{
-                                minWidth: 40,
-                                padding: '2px 2px',
+                              <TableHead className="text-white" style={{
+                                minWidth: '140px',
+                                padding: '4px',
                                 textAlign: 'center',
-                                fontSize: '10px'
+                                fontSize: '11px'
                               }}>End Up</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {Array.isArray(players) && players.map((p: any) => (
-                              <TableRow key={p.id}>
+                              <TableRow
+                                key={p.id}
+                                className="border-b-white/10"
+                                style={{ minHeight: 28 }} // Increased row height
+                              >
                                 <TableCell style={{
-                                  minWidth: 50,
-                                  padding: '2px 2px',
-                                  fontSize: '10px'
+                                  padding: '4px 8px', // More vertical padding
+                                  fontSize: '12px',
+                                  height: 28, // Increased cell height
+                                  verticalAlign: 'middle'
                                 }}>{p.name}</TableCell>
                                 <TableCell style={{
-                                  minWidth: 40,
-                                  padding: '2px 2px',
+                                  padding: '4px 8px',
                                   textAlign: 'center',
-                                  fontSize: '10px'
+                                  fontSize: '12px',
+                                  height: 28,
+                                  verticalAlign: 'middle'
                                 }}>
                                   {parseInt(String(playerTotals[p.id] ?? 0), 10)}
                                 </TableCell>
                                 <TableCell style={{
-                                  minWidth: 40,
-                                  padding: '2px 2px',
+                                  padding: '4px 8px',
                                   textAlign: 'center',
-                                  fontSize: '10px'
+                                  fontSize: '12px',
+                                  height: 28,
+                                  verticalAlign: 'middle'
                                 }}>
                                   <Input
                                     type="number"
+                                    className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
                                     style={{
-                                      width: 40,
-                                      fontSize: '10px',
-                                      padding: '2px 2px',
-                                      textAlign: 'center'
+                                      width: 90,
+                                      height: 28, // Increased input box height
+                                      fontSize: '12px',
+                                      padding: '4px 6px',
+                                      textAlign: 'center',
+                                      lineHeight: '24px'
                                     }}
                                     value={endUpValues[p.id] ?? ''}
                                     onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
@@ -1480,17 +1514,23 @@ return (
                               </TableRow>
                             ))}
                             {/* Totals row */}
-                            <TableRow className="font-bold border-t">
-                              <TableCell style={{ fontSize: '10px' }}>Total</TableCell>
+                            <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
+                              <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle' }}>Total</TableCell>
                               <TableCell style={{
                                 textAlign: 'center',
-                                fontSize: '10px'
+                                fontSize: '12px',
+                                padding: '4px 8px',
+                                height: 28,
+                                verticalAlign: 'middle'
                               }}>
                                 {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
                               </TableCell>
                               <TableCell style={{
                                 textAlign: 'center',
-                                fontSize: '10px'
+                                fontSize: '12px',
+                                padding: '4px 8px',
+                                height: 28,
+                                verticalAlign: 'middle'
                               }}>
                                 {Object.values(endUpValues).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
                               </TableCell>
@@ -1507,20 +1547,20 @@ return (
               </div>
               {/* Admin notification and approval UI */}
               {isAdmin && pendingRequests.length > 0 && (
-                <Card className="mb-6">
+                <Card className="mb-6 bg-gray-900/80 border-gray-700">
                   <CardHeader>
-                    <CardTitle>Pending Buy-in Requests</CardTitle>
-                    <CardDescription>Approve or reject buy-in requests below.</CardDescription>
+                    <CardTitle className="text-white">Pending Buy-in Requests</CardTitle>
+                    <CardDescription className="text-gray-400">Approve or reject buy-in requests below.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       {pendingRequests.map((r) => (
-                        <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
+                        <div key={r.id} className="flex items-center justify-between rounded-md border p-3 border-gray-700">
                           <div>
-                            <div className="font-medium">
+                            <div className="font-medium text-white">
                               {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
                             </div>
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-yellow-400">
                               {`${r.amount >= 0 ? '+' : ''}$${r.amount.toFixed(2)}`}
                             </div>
                           </div>
@@ -1534,7 +1574,8 @@ return (
                             </Button>
                             <Button
                               size="sm"
-                              variant="outline"
+                              variant="destructive"
+                              className="bg-red-600 hover:bg-red-700 text-white"
                               onClick={() => handleReject(r.id)}
                               disabled={processingRequests.includes(r.id)}
                             >
@@ -1549,10 +1590,10 @@ return (
               )}
               {/* Admin notification and approval UI for join requests */}
               {isAdmin && pendingJoinRequests.length > 0 && (
-                <Card className="mb-6">
+                <Card className="mb-6 bg-gray-900/80 border-gray-700">
                   <CardHeader>
-                    <CardTitle>Pending Join Requests</CardTitle>
-                    <CardDescription>Approve or reject player join requests below.</CardDescription>
+                    <CardTitle className="text-white">Pending Join Requests</CardTitle>
+                    <CardDescription className="text-gray-400">Approve or reject player join requests below.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -1561,12 +1602,12 @@ return (
                         const playerObj = players.find((p: any) => p.id === r.player_id);
                         const displayName = playerObj?.name || r.player_name || '';
                         return (
-                          <div key={r.id} className="flex items-center justify-between rounded-md border p-3">
+                          <div key={r.id} className="flex items-center justify-between rounded-md border p-3 border-gray-700">
                             <div>
-                              <div className="font-medium">
+                              <div className="font-medium text-white">
                                 {displayName}
                               </div>
-                              <div className="text-sm text-muted-foreground">
+                              <div className="text-sm text-gray-300">
                                 Join request
                               </div>
                             </div>
@@ -1580,7 +1621,8 @@ return (
                               </Button>
                               <Button 
                                 size="sm" 
-                                variant="outline" 
+                                variant="destructive" 
+                                className="bg-red-600 hover:bg-red-700 text-white"
                                 onClick={() => handleRejectJoin(r.id)}
                                 disabled={processingJoinRequests.includes(r.id)}
                               >
@@ -1595,20 +1637,20 @@ return (
                 </Card>
               )}
               {/* Player totals table */}
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Total Buy-ins</CardTitle>
-                  <CardDescription>
+              <Card className="mb-6 bg-gray-900/50 border-gray-700">
+                <CardHeader className="p-4">
+                  <CardTitle className="text-white">Total Buy-ins</CardTitle>
+                  <CardDescription className="text-gray-400">
                     Your total approved buy-ins for this table.
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 pt-0">
                   {/* Show only the current user's total buy-ins */}
-                  <div className="flex flex-col items-center justify-center py-4">
-                    <div className="text-xl font-bold">
-                      ${playerTotals[profile?.id]?.toFixed(2) || '0.00'}
+                  <div className="flex flex-col items-center justify-center py-2">
+                    <div className="text-4xl font-bold text-white">
+                      {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
                     </div>
-                    <div className="text-muted-foreground mt-2">
+                    <div className="text-gray-200 mt-2">
                       Player: {profile?.name}
                     </div>
                   </div>
@@ -1617,39 +1659,41 @@ return (
             </>
           )}
 
-          <UITable>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Player</TableHead>
-                <TableHead className="text-right">Total Buy-ins</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {/* Always show all players, regardless of active status.
+          <div className="mt-4" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <UITable>
+              <TableHeader>
+                <TableRow className="border-b-green-400/30">
+                  <TableHead className="text-white">Player</TableHead>
+                  <TableHead className="text-right text-white">Total Buy-ins</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* Always show all players, regardless of active status.
                   - Dim only real 'inactive' players (status === 'inactive').
                   - Show '(Pending)' for players waiting admin approval (do not show red 'Exited'). */}
-              {players.map((p: any) => {
-                const isPending = !!p.pending;
-                const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
-                return (
-                  <TableRow key={p.id} className={isInactive ? 'opacity-50' : ''}>
-                    <TableCell>
-                      {p.name}
-                      {isPending && (
-                        <span style={{ color: '#666', marginLeft: 6, fontSize: 12 }}>(Pending)</span>
-                      )}
-                      {isInactive && (
-                        <span style={{ color: 'red', marginLeft: 6, fontSize: 12 }}>(Exited)</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {parseInt(String(p.totalPoints ?? 0), 10)}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </UITable>
+                {players.map((p: any) => {
+                  const isPending = !!p.pending;
+                  const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
+                  return (
+                    <TableRow key={p.id} className={`border-b-green-400/20 ${isInactive ? 'opacity-50' : ''}`}>
+                      <TableCell className="font-medium text-white">
+                        {p.name}
+                        {isPending && (
+                          <span style={{ color: '#fcd34d', marginLeft: 6, fontSize: 12 }}>(Pending)</span>
+                        )}
+                        {isInactive && (
+                          <span style={{ color: '#ef4444', marginLeft: 6, fontSize: 12 }}>(Exited)</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-white">
+                        {parseInt(String(p.totalPoints ?? 0), 10)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </UITable>
+          </div>
 
           {/* Exit Game button (always visible) */}
           <Dialog open={openExit} onOpenChange={setOpenExit}>
@@ -1663,13 +1707,13 @@ return (
                                Back to Table Selection
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
               <DialogHeader>
                 <DialogTitle>Exit Game</DialogTitle>
               </DialogHeader>
               <div className="space-y-2 text-sm">
                 <p>You will be moved to the table selection page.</p>
-                <p className="text-muted-foreground text-sm">Click Yes to continue.</p>
+                <p className="text-gray-300 text-sm">Click Yes to continue.</p>
               </div>
               <DialogFooter>
                 <Button
