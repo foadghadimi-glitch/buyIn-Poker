@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[44823],{206525:(e,n,t)=>{t.r(n),t.d(n,{SwitchComponentsOnState:()=>s});var l=t(406029),r=t(808059),u=t(898837),o=t(962316);let s=e=>{let{switchValue:n,options:t}=e,s=(0,r.Cw)(n),p=(0,o.NF)(),i=t.find(e=>e.value===s);if(!i)return null;let h=(0,u.Q)(i?.type);return h?(0,l.jsx)(h,{...i.props}):p?null:(0,l.jsx)("div",{children:"Something went wrong. Component not found."})}}}]);
+//# sourceMappingURL=SwitchComponentsOnState.632645d3fd9eaf4b.js.map
