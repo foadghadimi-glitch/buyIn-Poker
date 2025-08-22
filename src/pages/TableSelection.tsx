@@ -35,40 +35,17 @@ const TableSelection = ({
   const profile = storage.getProfile();
 
   useEffect(() => {
-    // Log when waitingApproval changes (i.e., after join request and after admin approval)
     console.log('[TableSelection] waitingApproval changed:', waitingApproval);
   }, [waitingApproval]);
 
   useEffect(() => {
-    // Log when TableSelection is mounted and when props change
     console.log('[TableSelection] mounted. waitingApproval:', waitingApproval);
   }, []);
 
-  // Add logging for props.table and props.waitingApproval on every render
   useEffect(() => {
     console.log('[TableSelection] props.table:', storage.getTable());
     console.log('[TableSelection] props.waitingApproval:', waitingApproval);
   }, [waitingApproval, tableName, joinCode]);
-
-  // Listen for join_approved broadcast event and handle transition
-  useEffect(() => {
-    const channel = supabase
-      .channel('user_' + profile?.id)
-      .on('broadcast', { event: 'join_approved' }, payload => {
-        // Close the notification if open
-        // Move to PokerTable page after notification is closed
-        setTimeout(() => {
-          if (typeof onJoinTable === 'function') {
-            onJoinTable(storage.getTable());
-          }
-        }, 100); // Small delay to ensure notification is closed
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [profile, onJoinTable]);
 
   const handleCreateTable = async () => {
     if (!profile) return;
@@ -128,89 +105,44 @@ const TableSelection = ({
     }
   };
 
+  // SIMPLIFIED: only look up table and delegate to parent; no join_request, no admin activation, no broadcast
   const handleJoinTable = async () => {
-    if (!profile) return;
-    
+    if (!profile) {
+      console.warn('[TableSelection] No profile; cannot join.');
+      return;
+    }
     const codeInt = parseInt(joinCode, 10);
-    if (isNaN(codeInt) || codeInt < 1000 || codeInt > 9999) {
-      alert('Please enter a valid 4-digit join code.');
+    if (isNaN(codeInt) || joinCode.length !== 4) {
+      alert('Enter a valid 4-digit code.');
       return;
     }
 
-    // Find the table with the given join_code
+    console.log('[TableSelection] Looking up table by join_code', { join_code: codeInt });
+
     const { data: tableData, error: tableError } = await supabase
       .from('poker_tables')
       .select('*')
       .eq('join_code', codeInt)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
     if (tableError || !tableData) {
-      alert('Join code not found or table is not active.');
+      console.warn('[TableSelection] Table lookup failed', { join_code: codeInt, error: tableError?.message });
+      alert('Join code not found or table inactive.');
       return;
     }
 
-    // Check if this player is the admin
-    if (tableData.admin_player_id === profile.id) {
-      // mark admin as active in table_players (or upsert)
-      await supabase
-        .from('table_players')
-        .upsert({ table_id: tableData.id, player_id: profile.id, status: 'active' });
+    console.log('[TableSelection] Found table; delegating to parent.', { tableId: tableData.id });
 
-      const tableWithPlayers: PokerTableRow = {
-        ...tableData,
-        players: []
-      };
-      storage.setTable(tableWithPlayers);
-      if (typeof onJoinTable === 'function') onJoinTable(tableWithPlayers);
-      return;
-    }
-
-    // Check if a pending join request already exists for this user and table
-    const { data: existingReqs, error: reqError } = await supabase
-      .from('join_requests')
-      .select('*')
-      .eq('table_id', tableData.id)
-      .eq('player_id', profile.id)
-      .eq('status', 'pending');
-
-    if (!reqError && existingReqs && existingReqs.length > 0) {
-      alert('You already have a pending join request for this table.');
-      return;
-    }
-
-    // Add join request to the database
-    const joinReq = {
-      id: uuidv4(),
-      table_id: tableData.id,
-      player_id: profile.id,
-      status: 'pending'
+    const tableWithPlayers: PokerTableRow = {
+      ...tableData,
+      players: []
     };
-    // Insert and request the inserted row back so we have the join request id
-    const { data: insertedReq, error: joinError } = await supabase
-      .from('join_requests')
-      .insert([joinReq])
-      .select('id');
-    const insertedId = Array.isArray(insertedReq) && insertedReq[0]?.id ? insertedReq[0].id : joinReq.id;
-    if (joinError) {
-      alert('Failed to create join request. ' + (joinError.message || ''));
-      return;
-    }
 
-    // Notify admin using admin_player_id and include the join request id so admin can dedupe
-    await supabase
-      .channel('user_' + tableData.admin_player_id)
-      .send({
-        type: 'broadcast',
-        event: 'join_request_created',
-        payload: { tableId: tableData.id, playerId: profile.id, playerName: profile.name, requestId: insertedId }
-      });
+    // Persist for parent convenience (optional)
+    try { storage.setTable(tableWithPlayers); } catch {}
 
     if (typeof onJoinTable === 'function') {
-      const tableWithPlayers: PokerTableRow = {
-        ...tableData,
-        players: []
-      };
       onJoinTable(tableWithPlayers);
     }
   };
