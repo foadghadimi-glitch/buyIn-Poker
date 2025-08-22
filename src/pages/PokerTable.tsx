@@ -993,7 +993,7 @@ const isAccessControlOrTransient = (err: any) => {
 };
 
 // Retry wrapper for supabase queries to tolerate transient/access-control errors
-const retryQuery = async <T>(fn: () => Promise<T>, retries = 3, baseDelay = 150): Promise<T> => {
+const retryQuery = async <T,>(fn: () => Promise<T>, retries = 3, baseDelay = 150): Promise<T> => {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       return await fn();
