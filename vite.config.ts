@@ -21,10 +21,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    rollupOptions: {
-      input: {
-        main: '/public/index.html'
-      }
-    }
+    // Remove rollupOptions.input to avoid interfering with Vite's HTML handling
   },
 }));
