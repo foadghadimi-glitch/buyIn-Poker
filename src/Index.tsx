@@ -289,7 +289,48 @@ const IndexPage = () => {
     }
   }, []);
 
-  // Onboarding guard (unchanged, but no hooks appear after this guard)
+  // Manifest and service worker logging (move this above the onboarding guard)
+  useEffect(() => {
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) {
+      console.log('[PWA] Manifest link found in <head>:', manifestLink.getAttribute('href'));
+    } else {
+      console.warn('[PWA] Manifest link NOT found in <head>');
+    }
+
+    fetch('/manifest.json')
+      .then(res => {
+        console.log('[PWA] Manifest fetch status:', res.status);
+        if (res.ok) {
+          console.log('[PWA] Manifest fetched successfully');
+          return res.json();
+        } else {
+          console.error('[PWA] Manifest fetch failed with status:', res.status);
+        }
+      })
+      .then(json => {
+        if (json) {
+          console.log('[PWA] Manifest content:', json);
+        }
+      })
+      .catch(err => {
+        console.error('[PWA] Manifest fetch error:', err);
+      });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) {
+          console.log('[PWA] Service worker registration found:', reg);
+        } else {
+          console.warn('[PWA] No service worker registration found');
+        }
+      });
+    }
+
+    console.log('[PWA] <head> innerHTML:', document.head.innerHTML);
+  }, []);
+
+  // Onboarding guard (unchanged)
   if (!profile || storage.shouldForceOnboarding?.()) {
     if (storage.shouldForceOnboarding?.()) {
       storage.clearForceOnboardingFlag?.();
@@ -331,50 +372,6 @@ const IndexPage = () => {
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  useEffect(() => {
-    // Log manifest link presence in the DOM
-    const manifestLink = document.querySelector('link[rel="manifest"]');
-    if (manifestLink) {
-      console.log('[PWA] Manifest link found in <head>:', manifestLink.getAttribute('href'));
-    } else {
-      console.warn('[PWA] Manifest link NOT found in <head>');
-    }
-
-    // Try to fetch the manifest file
-    fetch('/manifest.json')
-      .then(res => {
-        console.log('[PWA] Manifest fetch status:', res.status);
-        if (res.ok) {
-          console.log('[PWA] Manifest fetched successfully');
-          return res.json();
-        } else {
-          console.error('[PWA] Manifest fetch failed with status:', res.status);
-        }
-      })
-      .then(json => {
-        if (json) {
-          console.log('[PWA] Manifest content:', json);
-        }
-      })
-      .catch(err => {
-        console.error('[PWA] Manifest fetch error:', err);
-      });
-
-    // Log when the service worker is registered
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (reg) {
-          console.log('[PWA] Service worker registration found:', reg);
-        } else {
-          console.warn('[PWA] No service worker registration found');
-        }
-      });
-    }
-
-    // Log the entire <head> innerHTML for debugging
-    console.log('[PWA] <head> innerHTML:', document.head.innerHTML);
   }, []);
 
   return (
