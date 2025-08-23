@@ -337,7 +337,7 @@ const IndexPage = () => {
     // Log manifest link presence in the DOM
     const manifestLink = document.querySelector('link[rel="manifest"]');
     if (manifestLink) {
-      console.log('[PWA] Manifest link found:', manifestLink.getAttribute('href'));
+      console.log('[PWA] Manifest link found in <head>:', manifestLink.getAttribute('href'));
     } else {
       console.warn('[PWA] Manifest link NOT found in <head>');
     }
@@ -345,6 +345,7 @@ const IndexPage = () => {
     // Try to fetch the manifest file
     fetch('/manifest.json')
       .then(res => {
+        console.log('[PWA] Manifest fetch status:', res.status);
         if (res.ok) {
           console.log('[PWA] Manifest fetched successfully');
           return res.json();
@@ -360,6 +361,17 @@ const IndexPage = () => {
       .catch(err => {
         console.error('[PWA] Manifest fetch error:', err);
       });
+
+    // Log when the service worker is registered
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) {
+          console.log('[PWA] Service worker registration found:', reg);
+        } else {
+          console.warn('[PWA] No service worker registration found');
+        }
+      });
+    }
   }, []);
 
   return (
