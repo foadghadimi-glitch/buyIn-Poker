@@ -372,6 +372,9 @@ const IndexPage = () => {
         }
       });
     }
+
+    // Log the entire <head> innerHTML for debugging
+    console.log('[PWA] <head> innerHTML:', document.head.innerHTML);
   }, []);
 
   return (
