@@ -333,6 +333,35 @@ const IndexPage = () => {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
+  useEffect(() => {
+    // Log manifest link presence in the DOM
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) {
+      console.log('[PWA] Manifest link found:', manifestLink.getAttribute('href'));
+    } else {
+      console.warn('[PWA] Manifest link NOT found in <head>');
+    }
+
+    // Try to fetch the manifest file
+    fetch('/manifest.json')
+      .then(res => {
+        if (res.ok) {
+          console.log('[PWA] Manifest fetched successfully');
+          return res.json();
+        } else {
+          console.error('[PWA] Manifest fetch failed with status:', res.status);
+        }
+      })
+      .then(json => {
+        if (json) {
+          console.log('[PWA] Manifest content:', json);
+        }
+      })
+      .catch(err => {
+        console.error('[PWA] Manifest fetch error:', err);
+      });
+  }, []);
+
   return (
     <>
       {table ? (
