@@ -19,6 +19,19 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Top-level DOM check for manifest link (runs before React mounts)
+if (typeof window !== "undefined") {
+  window.addEventListener("DOMContentLoaded", () => {
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) {
+      console.log('[PWA][DOMLoaded] Manifest link found in <head>:', manifestLink.getAttribute('href'));
+    } else {
+      console.warn('[PWA][DOMLoaded] Manifest link NOT found in <head>');
+    }
+    console.log('[PWA][DOMLoaded] <head> innerHTML:', document.head.innerHTML);
+  });
+}
+
 const IndexPage = () => {
   const [profile, setProfile] = useState<any>(() => {
     const p = storage.getProfile();
