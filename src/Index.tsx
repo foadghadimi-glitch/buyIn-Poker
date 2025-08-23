@@ -9,7 +9,13 @@ import Onboarding from '@/pages/Onboarding';
 // Register service worker for PWA installability
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(reg => {
+        console.log('[PWA] Service worker registered:', reg);
+      })
+      .catch(err => {
+        console.error('[PWA] Service worker registration failed:', err);
+      });
   });
 }
 
