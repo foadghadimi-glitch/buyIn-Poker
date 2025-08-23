@@ -24,7 +24,3 @@ export default defineConfig(({ mode }) => ({
     // Remove rollupOptions.input to avoid interfering with Vite's HTML handling
   },
 }));
-      }
-    }
-  },
-}));
