@@ -6,6 +6,13 @@ import PokerTable from '@/pages/PokerTable';
 import TableSelection from '@/pages/TableSelection';
 import Onboarding from '@/pages/Onboarding';
 
+// Register service worker for PWA installability
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+
 const IndexPage = () => {
   const [profile, setProfile] = useState<any>(() => {
     const p = storage.getProfile();
@@ -307,6 +314,19 @@ const IndexPage = () => {
   // keep decide log AFTER onboarding guard
   console.log('[Index.render] decide', { tableId: table?.id || null });
 
+  // Add state for PWA install prompt
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  // Listen for beforeinstallprompt event
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
   return (
     <>
       {table ? (
@@ -356,6 +376,30 @@ const IndexPage = () => {
           }}
           waitingApproval={waitingForApproval ?? false}
         />
+      )}
+      {/* Add Install App button if install prompt is available */}
+      {deferredPrompt && (
+        <button
+          style={{
+            position: 'fixed',
+            bottom: 20,
+            right: 20,
+            zIndex: 9999,
+            padding: '10px 18px',
+            background: '#10b981',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontWeight: 600,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+          }}
+          onClick={() => {
+            deferredPrompt.prompt();
+            setDeferredPrompt(null);
+          }}
+        >
+          Install App
+        </button>
       )}
     </>
   );
