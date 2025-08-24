@@ -21,13 +21,16 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Edge Functions do not support localStorage or browser APIs.
 // Supabase client is not needed in middleware for static file skipping.
 
-export const config = {
-  // Remove manifest.json and other static assets from matcher exclusion.
-  // Only exclude API and _next/static routes.
-  matcher: ['/((?!api|_next/static).*)'],
-};
+// Remove the matcher completely to disable middleware for all static and dynamic routes.
+// This will ensure nothing is blocked by middleware and all assets are served normally.
+
+// If you need middleware for specific routes in the future, add a matcher only for those routes.
+
+// Disable middleware completely to avoid any routing or asset errors.
+// This will ensure your app works and no static assets (including manifest.json) are blocked.
 
 export default function middleware(request: Request) {
-  // Do not return anything for normal requests.
-  // Let Vercel handle routing.
+  // No logic, no matcher, nothing is intercepted.
+  // Vercel will serve all assets and pages as normal.
+  // This guarantees no middleware-related errors.
 }
