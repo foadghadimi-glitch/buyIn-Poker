@@ -22,9 +22,9 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Supabase client is not needed in middleware for static file skipping.
 
 export const config = {
-  matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|favicon|icon-|assets|service-worker.js|robots.txt|poker-logo.png|Poker_01.png|Poker_02.png|Poker_03.png|Poker_04.png|Poker_05.png|Poker_06.png|placeholder.svg|screenshot-1.png).*)'
-  ],
+  // Remove manifest.json and other static assets from matcher exclusion.
+  // Only exclude API and _next/static routes.
+  matcher: ['/((?!api|_next/static).*)'],
 };
 
 export default function middleware(request: Request) {
