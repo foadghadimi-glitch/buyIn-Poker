@@ -17,16 +17,25 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   }
 });
 
-// Example: Skip authentication for static files
-export function middleware(req) {
+// --- FIX: Remove usage of NextResponse and req.nextUrl for Edge compatibility ---
+// Use standard Web API Request and Response objects instead
+
+export function middleware(request: Request) {
+  const url = new URL(request.url);
+
+  // Example: Skip authentication for static files
   if (
-    req.nextUrl.pathname.startsWith('/manifest.json') ||
-    req.nextUrl.pathname.startsWith('/favicon') ||
-    req.nextUrl.pathname.startsWith('/icon-')
+    url.pathname.startsWith('/manifest.json') ||
+    url.pathname.startsWith('/favicon') ||
+    url.pathname.startsWith('/icon-')
   ) {
-    return NextResponse.next();
+    // Allow request to proceed
+    return new Response(null, { status: 200 });
   }
+
   // ...existing authentication or other logic...
+  // For now, just allow all requests
+  return new Response(null, { status: 200 });
 }
 
 // Fix: Remove or replace imports that are not supported in Edge Functions
