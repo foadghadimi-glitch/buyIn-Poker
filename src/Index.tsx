@@ -46,9 +46,20 @@ const IndexPage = () => {
   const [hydrating, setHydrating] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [debugTick, setDebugTick] = useState(0);
-  const [waitingForApproval, setWaitingForApproval] = useState(false); // ADDED
-  const [pendingJoinTableId, setPendingJoinTableId] = useState<string | null>(null); // ADDED
-  const selectingRef = useRef(false); // ADDED: reentrancy / double-click guard
+  const [waitingForApproval, setWaitingForApproval] = useState(false);
+  const [pendingJoinTableId, setPendingJoinTableId] = useState<string | null>(null);
+  const selectingRef = useRef(false);
+
+  // --- MOVE PWA install prompt hook to top ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   // ADDED: helper to normalize a raw table row (from creation/join) into canonical shape
   const normalizeSelectedTable = (raw: any, currentProfile: any) => {
@@ -373,19 +384,6 @@ const IndexPage = () => {
 
   // keep decide log AFTER onboarding guard
   console.log('[Index.render] decide', { tableId: table?.id || null });
-
-  // Add state for PWA install prompt
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
-  // Listen for beforeinstallprompt event
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
 
   return (
     <>

@@ -1436,8 +1436,8 @@ return (
                       <div
                         style={{
                           fontSize: '10px',
-                          height: '600px', // Increased height for the table container
-                          maxHeight: '80vh', // Increased maxHeight for the table container
+                          height: '600px',
+                          maxHeight: '80vh',
                           overflowX: 'auto',
                           overflowY: 'auto',
                           padding: '0'
@@ -1465,54 +1465,76 @@ return (
                                 textAlign: 'center',
                                 fontSize: '11px'
                               }}>End Up</TableHead>
+                              {/* NEW COLUMN */}
+                              <TableHead className="text-white" style={{
+                                minWidth: '120px',
+                                padding: '4px',
+                                textAlign: 'center',
+                                fontSize: '11px'
+                              }}>Total Profit / 7</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {Array.isArray(players) && players.map((p: any) => (
-                              <TableRow
-                                key={p.id}
-                                className="border-b-white/10"
-                                style={{ minHeight: 28 }} // Increased row height
-                              >
-                                <TableCell style={{
-                                  padding: '4px 8px', // More vertical padding
-                                  fontSize: '12px',
-                                  height: 28, // Increased cell height
-                                  verticalAlign: 'middle'
-                                }}>{p.name}</TableCell>
-                                <TableCell style={{
-                                  padding: '4px 8px',
-                                  textAlign: 'center',
-                                  fontSize: '12px',
-                                  height: 28,
-                                  verticalAlign: 'middle'
-                                }}>
-                                  {parseInt(String(playerTotals[p.id] ?? 0), 10)}
-                                </TableCell>
-                                <TableCell style={{
-                                  padding: '4px 8px',
-                                  textAlign: 'center',
-                                  fontSize: '12px',
-                                  height: 28,
-                                  verticalAlign: 'middle'
-                                }}>
-                                  <Input
-                                    type="number"
-                                    className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-                                    style={{
-                                      width: 90,
-                                      height: 28, // Increased input box height
-                                      fontSize: '12px',
-                                      padding: '4px 6px',
-                                      textAlign: 'center',
-                                      lineHeight: '24px'
-                                    }}
-                                    value={endUpValues[p.id] ?? ''}
-                                    onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
+                            {Array.isArray(players) && players.map((p: any) => {
+                              const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                              const endUp = endUpValues[p.id] ?? 0;
+                              const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
+                              return (
+                                <TableRow
+                                  key={p.id}
+                                  className="border-b-white/10"
+                                  style={{ minHeight: 28 }}
+                                >
+                                  <TableCell style={{
+                                    padding: '4px 8px',
+                                    fontSize: '12px',
+                                    height: 28,
+                                    verticalAlign: 'middle'
+                                  }}>{p.name}</TableCell>
+                                  <TableCell style={{
+                                    padding: '4px 8px',
+                                    textAlign: 'center',
+                                    fontSize: '12px',
+                                    height: 28,
+                                    verticalAlign: 'middle'
+                                  }}>
+                                    {totalBuyIns}
+                                  </TableCell>
+                                  <TableCell style={{
+                                    padding: '4px 8px',
+                                    textAlign: 'center',
+                                    fontSize: '12px',
+                                    height: 28,
+                                    verticalAlign: 'middle'
+                                  }}>
+                                    <Input
+                                      type="number"
+                                      className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                                      style={{
+                                        width: 90,
+                                        height: 28,
+                                        fontSize: '12px',
+                                        padding: '4px 6px',
+                                        textAlign: 'center',
+                                        lineHeight: '24px'
+                                      }}
+                                      value={endUp}
+                                      onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
+                                    />
+                                  </TableCell>
+                                  {/* NEW COLUMN */}
+                                  <TableCell style={{
+                                    padding: '4px 8px',
+                                    textAlign: 'center',
+                                    fontSize: '12px',
+                                    height: 28,
+                                    verticalAlign: 'middle'
+                                  }}>
+                                    {profitDiv7}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                             {/* Totals row */}
                             <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
                               <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle' }}>Total</TableCell>
@@ -1533,6 +1555,27 @@ return (
                                 verticalAlign: 'middle'
                               }}>
                                 {Object.values(endUpValues).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                              </TableCell>
+                              {/* NEW COLUMN TOTAL */}
+                              <TableCell style={{
+                                textAlign: 'center',
+                                fontSize: '12px',
+                                padding: '4px 8px',
+                                height: 28,
+                                verticalAlign: 'middle'
+                              }}>
+                                {
+                                  // Sum of (endUp - totalBuyIns) / 7 for all players
+                                  players.length > 0
+                                    ? (
+                                      players.reduce((sum: number, p: any) => {
+                                        const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                                        const endUp = endUpValues[p.id] ?? 0;
+                                        return sum + (endUp - totalBuyIns) / 7;
+                                      }, 0).toFixed(2)
+                                    )
+                                    : '0.00'
+                                }
                               </TableCell>
                             </TableRow>
                           </TableBody>
