@@ -22,26 +22,14 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Supabase client is not needed in middleware for static file skipping.
 
 export const config = {
-  // Only run middleware on non-static, non-API routes
   matcher: ['/((?!api|_next/static|favicon.ico|manifest.json|favicon|icon-).*)'],
 };
 
 export default function middleware(request: Request) {
-  try {
-    const url = new URL(request.url);
+  // Do not return anything for normal requests.
+  // Remove the try/catch and error handling block.
+  // Just leave the function empty so Vercel routing works.
 
-    // Example: Skip authentication for static files (redundant with matcher, but safe)
-    if (
-      url.pathname.startsWith('/manifest.json') ||
-      url.pathname.startsWith('/favicon') ||
-      url.pathname.startsWith('/icon-')
-    ) {
-      return new Response(null, { status: 200 });
-    }
-
-    // For now, just allow all requests
-    return new Response(null, { status: 200 });
-  } catch (err) {
-    return new Response('Internal Server Error', { status: 500 });
-  }
+  // Correct: Let Vercel handle routing, do not block or modify requests.
+  // No return statement needed.
 }
