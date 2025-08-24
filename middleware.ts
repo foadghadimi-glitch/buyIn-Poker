@@ -22,14 +22,12 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Supabase client is not needed in middleware for static file skipping.
 
 export const config = {
-  matcher: ['/((?!api|_next/static|favicon.ico|manifest.json|favicon|icon-).*)'],
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|favicon|icon-|assets|service-worker.js|robots.txt|poker-logo.png|Poker_01.png|Poker_02.png|Poker_03.png|Poker_04.png|Poker_05.png|Poker_06.png|placeholder.svg|screenshot-1.png).*)'
+  ],
 };
 
 export default function middleware(request: Request) {
   // Do not return anything for normal requests.
-  // Remove the try/catch and error handling block.
-  // Just leave the function empty so Vercel routing works.
-
-  // Correct: Let Vercel handle routing, do not block or modify requests.
-  // No return statement needed.
+  // Let Vercel handle routing.
 }
