@@ -1447,20 +1447,20 @@ return (
                           <TableHeader>
                             <TableRow className="border-b-white/20">
                               <TableHead className="text-white" style={{
-                                minWidth: '100px',
+                                minWidth: '70px', // reduced from 100px
                                 padding: '4px',
                                 fontSize: '11px',
                                 whiteSpace: 'nowrap',
                               }}>Player</TableHead>
                               <TableHead className="text-white" style={{
-                                minWidth: '80px',
+                                minWidth: '60px', // reduced from 80px
                                 padding: '4px',
                                 textAlign: 'center',
                                 fontSize: '11px',
                                 whiteSpace: 'nowrap',
                               }}>Total Buy-ins</TableHead>
                               <TableHead className="text-white" style={{
-                                minWidth: '140px',
+                                minWidth: '90px', // reduced from 140px
                                 padding: '4px',
                                 textAlign: 'center',
                                 fontSize: '11px'
@@ -1489,14 +1489,16 @@ return (
                                     padding: '4px 8px',
                                     fontSize: '12px',
                                     height: 28,
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    minWidth: '70px', // reduced from 100px
                                   }}>{p.name}</TableCell>
                                   <TableCell style={{
                                     padding: '4px 8px',
                                     textAlign: 'center',
                                     fontSize: '12px',
                                     height: 28,
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    minWidth: '60px' // reduced from 80px
                                   }}>
                                     {totalBuyIns}
                                   </TableCell>
@@ -1505,10 +1507,12 @@ return (
                                     textAlign: 'center',
                                     fontSize: '12px',
                                     height: 28,
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    minWidth: '90px' // reduced from 140px
                                   }}>
                                     <Input
                                       type="number"
+                                      step="any" // allow decimal input
                                       className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
                                       style={{
                                         width: 90,
@@ -1519,7 +1523,7 @@ return (
                                         lineHeight: '24px'
                                       }}
                                       value={endUp}
-                                      onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
+                                      onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
                                     />
                                   </TableCell>
                                   {/* NEW COLUMN */}
@@ -1537,13 +1541,14 @@ return (
                             })}
                             {/* Totals row */}
                             <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
-                              <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle' }}>Total</TableCell>
+                              <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle', minWidth: '70px' }}>Total</TableCell>
                               <TableCell style={{
                                 textAlign: 'center',
                                 fontSize: '12px',
                                 padding: '4px 8px',
                                 height: 28,
-                                verticalAlign: 'middle'
+                                verticalAlign: 'middle',
+                                minWidth: '60px'
                               }}>
                                 {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
                               </TableCell>
@@ -1554,7 +1559,7 @@ return (
                                 height: 28,
                                 verticalAlign: 'middle'
                               }}>
-                                {Object.values(endUpValues).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                                {Object.values(endUpValues).reduce((sum, v) => sum + parseFloat(String(v)), 0)}
                               </TableCell>
                               {/* NEW COLUMN TOTAL */}
                               <TableCell style={{
