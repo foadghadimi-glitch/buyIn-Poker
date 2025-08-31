@@ -1328,6 +1328,42 @@ const handleEditProfileSubmit = async () => {
   }
 };
 
+// Listen for end_up updates so all clients reflect admin-provided values
+useEffect(() => {
+  if (!table?.id) return;
+  const ch = supabase
+    .channel('table_' + table.id)
+    .on('broadcast', { event: 'end_up_updated' }, (payload) => {
+      try {
+        const values = payload?.payload?.endUpValues || {};
+        console.log('[PokerTable][broadcast][end_up_updated] received', { tableId: table.id, values });
+        setEndUpValues(values);
+      } catch (e) {
+        console.warn('[PokerTable] end_up_updated handler failed', e);
+      }
+    })
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}, [table?.id]);
+
+// Admin action: save end-up values and broadcast to table participants
+const handleSaveEndUp = async () => {
+  if (!table?.id) return;
+  try {
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'end_up_updated',
+        payload: { endUpValues }
+      });
+    toast.success('End-up values saved and broadcasted.');
+  } catch (e) {
+    console.error('[PokerTable] handleSaveEndUp failed', e);
+    toast.error('Failed to save end-up values.');
+  }
+};
+
 return (
     <div
       className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-cover"
@@ -1471,20 +1507,15 @@ return (
                   </HistoryDialogContent>
                 </HistoryDialog>
 
-                {/* End Up button (only visible for admin, comes after history) */}
-                {(() => { 
+                {/* End Up button (visible to all players; inputs editable only by admin) */}
+                {(() => {
+                  // show End Up button to everyone (admin edits, regular users read-only)
                   if (!isAdmin) {
-                    console.log('[PokerTable.UI] End Up hidden (isAdmin=false)', {
-                      profileId: profile?.id,
-                      normalizedAdminId
-                    });
+                    console.log('[PokerTable.UI] End Up visible (read-only) for regular player', { profileId: profile?.id });
                   } else {
-                    console.log('[PokerTable.UI] End Up visible (admin confirmed)', {
-                      profileId: profile?.id,
-                      normalizedAdminId
-                    });
+                    console.log('[PokerTable.UI] End Up visible (editable) for admin', { profileId: profile?.id });
                   }
-                  return isAdmin;
+                  return true;
                 })() && (
                   <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                     <DialogTrigger asChild>
@@ -1588,6 +1619,7 @@ return (
                                     <Input
                                       type="number"
                                       step="any" // allow decimal input
+                                      disabled={!isAdmin} // read-only for regular players
                                       className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
                                       style={{
                                         width: 90,
@@ -1663,10 +1695,16 @@ return (
                       </div>
                       <DialogFooter>
                         <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
+                        {/* Admin-only Save button persists via broadcast so everyone receives values */}
+                        {isAdmin && (
+                          <Button onClick={handleSaveEndUp} className="ml-2">
+                            Save End Up
+                          </Button>
+                        )}
                       </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                )}
+                     </DialogContent>
+                   </Dialog>
+                 )}
                 {/* Edit Profile button - placed immediately after End Up button */}
                 <Button
                   variant="outline"
