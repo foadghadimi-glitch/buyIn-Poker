@@ -14,43 +14,53 @@ import { toast } from 'sonner';
 const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
   const navigate = useNavigate();
   const existing = storage.getProfile();
-  const [name, setName] = useState(existing?.name ?? '');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     document.title = 'Onboarding — Poker Buy-in Tracker';
   }, []);
 
-  const onSubmit = async () => {
+  // Handler for name input change
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setName(e.target.value);
+    setError('');
+  };
+
+  // Handler for submitting the name
+  const handleSubmit = async () => {
     if (!name.trim()) {
       toast.error('Please enter your name.');
       return;
     }
 
     setIsSubmitting(true);
-    let finalName = name.trim();
 
     try {
-      // Check for existing names in the players table
+      // Check for existing names in the players table (case-insensitive)
       const { data: existingPlayers, error } = await supabase
         .from('players')
         .select('name')
-        .ilike('name', `${finalName}%`);
+        .ilike('name', name.trim());
 
-      if (!error && existingPlayers) {
-        // Count how many players have the same base name or base name with _number
-        const sameBase = existingPlayers.filter((u: { name: string }) =>
-          u.name === finalName || u.name.startsWith(`${finalName}_`)
-        );
-        if (sameBase.length > 0) {
-          finalName = `${finalName}_${sameBase.length}`;
-        }
+      if (error) {
+        setError('Error checking name. Please try again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (existingPlayers && existingPlayers.length > 0) {
+        setError('Name already exists. Please choose a different name.');
+        setName('');
+        setIsSubmitting(false);
+        return;
       }
 
       // Use a valid UUID for id
       const profile: Player = {
         id: uuidv4(),
-        name: finalName,
+        name: name.trim(),
         avatar: null,
       };
 
@@ -58,6 +68,7 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
       const { error: insertError } = await supabase.from('players').insert(profile);
       if (insertError) {
         toast.error(`Failed to save profile. Error: ${insertError.message || 'Unknown error'}`);
+        setIsSubmitting(false);
         return;
       }
 
@@ -75,7 +86,7 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      onSubmit();
+      handleSubmit();
     }
   };
 
@@ -109,17 +120,20 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
               id="name"
               placeholder="Enter your name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={handleNameChange}
               className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
               onKeyPress={handleKeyPress}
               maxLength={30}
               autoFocus
             />
+            {error && (
+              <div className="text-red-500 text-sm mt-2">{error}</div>
+            )}
           </div>
         </CardContent>
         <CardFooter>
           <Button
-            onClick={onSubmit}
+            onClick={handleSubmit}
             disabled={isSubmitting || !name.trim()}
             className="w-full h-14 text-lg font-bold btn-poker primary bg-green-600 hover:bg-green-700 text-white py-6"
           >

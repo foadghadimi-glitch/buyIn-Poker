@@ -733,18 +733,21 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
           console.warn('[PokerTable] broadcast buy_in_updated refresh failed', e);
         }
       })
-      // ADDED: join_refresh event to re-pull players & totals
       .on('broadcast', { event: 'join_refresh' }, async (payload) => {
         console.log('[PokerTable][broadcast][join_refresh] received', payload);
         try {
           await refreshTableData(table.id, 'broadcast:join_refresh');
+          // If the updated player is the admin, fetch and update admin name
+          if (payload?.updatedPlayer === normalizedAdminId) {
+            await fetchAdminName(table.id);
+          }
         } catch (e) {
           console.warn('[PokerTable] broadcast join_refresh refresh failed', e);
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(bc); };
-  }, [table?.id]);
+  }, [table?.id, normalizedAdminId]);
 
   // DIAG: log player list & totals correlation each time players or totals change
   useEffect(() => {
@@ -1253,6 +1256,114 @@ const handleRejectJoin = async (reqId: string) => {
   }
 };
 
+const [openEditProfile, setOpenEditProfile] = useState(false);
+const [editName, setEditName] = useState(profile?.name || '');
+const [editError, setEditError] = useState('');
+const [editSubmitting, setEditSubmitting] = useState(false);
+
+const handleEditNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  setEditName(e.target.value);
+  setEditError('');
+};
+
+const handleEditProfileSubmit = async () => {
+  if (!editName.trim()) {
+    setEditError('Please enter your name.');
+    return;
+  }
+  setEditSubmitting(true);
+  try {
+    // Check for existing name (case-insensitive, excluding current user)
+    const { data: existingPlayers, error } = await supabase
+      .from('players')
+      .select('id,name')
+      .ilike('name', editName.trim());
+
+    if (error) {
+      setEditError('Error checking name. Please try again.');
+      setEditSubmitting(false);
+      return;
+    }
+
+    // Exclude current user's own name from the check
+    const nameTaken = (existingPlayers || []).some(
+      (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
+    );
+
+    if (nameTaken) {
+      setEditError('This name already exists. Please provide a new name.');
+      setEditName('');
+      setEditSubmitting(false);
+      return;
+    }
+
+    await supabase
+      .from('players')
+      .update({ name: editName.trim() })
+      .eq('id', profile?.id);
+
+    storage.setProfile({ ...profile, name: editName.trim() });
+
+    // If current user is admin, update adminName state immediately
+    if (profile?.id === normalizedAdminId) {
+      setAdminName(editName.trim());
+    }
+
+    setEditSubmitting(false);
+    setOpenEditProfile(false);
+    toast.success('Profile updated!');
+
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'join_refresh',
+        payload: { updatedPlayer: profile?.id }
+      });
+
+    await refreshTableData(table.id, 'edit profile');
+  } catch (error) {
+    setEditError('Failed to update profile. Please try again.');
+    setEditSubmitting(false);
+  }
+};
+
+// Listen for end_up updates so all clients reflect admin-provided values
+useEffect(() => {
+  if (!table?.id) return;
+  const ch = supabase
+    .channel('table_' + table.id)
+    .on('broadcast', { event: 'end_up_updated' }, (payload) => {
+      try {
+        const values = payload?.payload?.endUpValues || {};
+        console.log('[PokerTable][broadcast][end_up_updated] received', { tableId: table.id, values });
+        setEndUpValues(values);
+      } catch (e) {
+        console.warn('[PokerTable] end_up_updated handler failed', e);
+      }
+    })
+    .subscribe();
+  return () => { supabase.removeChannel(ch); };
+}, [table?.id]);
+
+// Admin action: save end-up values and broadcast to table participants
+const handleSaveEndUp = async () => {
+  if (!table?.id) return;
+  try {
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'end_up_updated',
+        payload: { endUpValues }
+      });
+    toast.success('End-up values saved and broadcasted.');
+  } catch (e) {
+    console.error('[PokerTable] handleSaveEndUp failed', e);
+    toast.error('Failed to save end-up values.');
+  }
+};
+
 return (
     <div
       className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-cover"
@@ -1268,8 +1379,8 @@ return (
           </CardTitle>
           <CardDescription className="text-gray-300">
             Join Code: <span className="font-bold text-yellow-300">{normalizedJoinCode}</span> <br />
-            {/* FIX: Add parentheses to clarify operator precedence */}
-            Admin: <span className="font-semibold text-white">{(table.adminName ?? adminName) || 'Loading...'}</span>
+            {/* FIX: prefer local adminName state first so admin sees immediate updates */}
+            Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1289,7 +1400,7 @@ return (
             <>
               {/* Buy-in request section */}
               <div className="mb-6 flex gap-2 items-center flex-wrap">
-                {/* Buy-in request button (always visible) */}
+                {/* Buy-in button (always visible) */}
                 <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                   <DialogTrigger asChild>
                     <Button
@@ -1396,20 +1507,15 @@ return (
                   </HistoryDialogContent>
                 </HistoryDialog>
 
-                {/* End Up button (only visible for admin, comes after history) */}
-                {(() => { 
+                {/* End Up button (visible to all players; inputs editable only by admin) */}
+                {(() => {
+                  // show End Up button to everyone (admin edits, regular users read-only)
                   if (!isAdmin) {
-                    console.log('[PokerTable.UI] End Up hidden (isAdmin=false)', {
-                      profileId: profile?.id,
-                      normalizedAdminId
-                    });
+                    console.log('[PokerTable.UI] End Up visible (read-only) for regular player', { profileId: profile?.id });
                   } else {
-                    console.log('[PokerTable.UI] End Up visible (admin confirmed)', {
-                      profileId: profile?.id,
-                      normalizedAdminId
-                    });
+                    console.log('[PokerTable.UI] End Up visible (editable) for admin', { profileId: profile?.id });
                   }
-                  return isAdmin;
+                  return true;
                 })() && (
                   <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                     <DialogTrigger asChild>
@@ -1447,20 +1553,20 @@ return (
                           <TableHeader>
                             <TableRow className="border-b-white/20">
                               <TableHead className="text-white" style={{
-                                minWidth: '100px',
+                                minWidth: '70px', // reduced from 100px
                                 padding: '4px',
                                 fontSize: '11px',
                                 whiteSpace: 'nowrap',
                               }}>Player</TableHead>
                               <TableHead className="text-white" style={{
-                                minWidth: '80px',
+                                minWidth: '60px', // reduced from 80px
                                 padding: '4px',
                                 textAlign: 'center',
                                 fontSize: '11px',
                                 whiteSpace: 'nowrap',
                               }}>Total Buy-ins</TableHead>
                               <TableHead className="text-white" style={{
-                                minWidth: '140px',
+                                minWidth: '90px', // reduced from 140px
                                 padding: '4px',
                                 textAlign: 'center',
                                 fontSize: '11px'
@@ -1489,14 +1595,16 @@ return (
                                     padding: '4px 8px',
                                     fontSize: '12px',
                                     height: 28,
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    minWidth: '70px', // reduced from 100px
                                   }}>{p.name}</TableCell>
                                   <TableCell style={{
                                     padding: '4px 8px',
                                     textAlign: 'center',
                                     fontSize: '12px',
                                     height: 28,
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    minWidth: '60px' // reduced from 80px
                                   }}>
                                     {totalBuyIns}
                                   </TableCell>
@@ -1505,10 +1613,13 @@ return (
                                     textAlign: 'center',
                                     fontSize: '12px',
                                     height: 28,
-                                    verticalAlign: 'middle'
+                                    verticalAlign: 'middle',
+                                    minWidth: '90px' // reduced from 140px
                                   }}>
                                     <Input
                                       type="number"
+                                      step="any" // allow decimal input
+                                      disabled={!isAdmin} // read-only for regular players
                                       className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
                                       style={{
                                         width: 90,
@@ -1519,7 +1630,7 @@ return (
                                         lineHeight: '24px'
                                       }}
                                       value={endUp}
-                                      onChange={e => handleEndUpChange(p.id, parseInt(e.target.value || '0', 10))}
+                                      onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
                                     />
                                   </TableCell>
                                   {/* NEW COLUMN */}
@@ -1537,13 +1648,14 @@ return (
                             })}
                             {/* Totals row */}
                             <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
-                              <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle' }}>Total</TableCell>
+                              <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle', minWidth: '70px' }}>Total</TableCell>
                               <TableCell style={{
                                 textAlign: 'center',
                                 fontSize: '12px',
                                 padding: '4px 8px',
                                 height: 28,
-                                verticalAlign: 'middle'
+                                verticalAlign: 'middle',
+                                minWidth: '60px'
                               }}>
                                 {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
                               </TableCell>
@@ -1554,7 +1666,7 @@ return (
                                 height: 28,
                                 verticalAlign: 'middle'
                               }}>
-                                {Object.values(endUpValues).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                                {Object.values(endUpValues).reduce((sum, v) => sum + parseFloat(String(v)), 0)}
                               </TableCell>
                               {/* NEW COLUMN TOTAL */}
                               <TableCell style={{
@@ -1583,10 +1695,29 @@ return (
                       </div>
                       <DialogFooter>
                         <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
+                        {/* Admin-only Save button persists via broadcast so everyone receives values */}
+                        {isAdmin && (
+                          <Button onClick={handleSaveEndUp} className="ml-2">
+                            Save End Up
+                          </Button>
+                        )}
                       </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                )}
+                     </DialogContent>
+                   </Dialog>
+                 )}
+                {/* Edit Profile button - placed immediately after End Up button */}
+                <Button
+                  variant="outline"
+                  className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-gray-700 hover:bg-gray-800 text-white border-none flex items-center gap-1 transition-all"
+                  onClick={() => {
+                    setEditName(profile?.name || '');
+                    setEditError('');
+                    setOpenEditProfile(true);
+                  }}
+                >
+                  <span role="img" aria-label="edit">✏️</span>
+                  Edit Profile
+                </Button>
               </div>
               {/* Admin notification and approval UI */}
               {isAdmin && pendingRequests.length > 0 && (
@@ -1724,7 +1855,7 @@ return (
                         {isPending && (
                           <span style={{ color: '#fcd34d', marginLeft: 6, fontSize: 12 }}>(Pending)</span>
                         )}
-                        {isInactive && (
+                                               {isInactive && (
                           <span style={{ color: '#ef4444', marginLeft: 6, fontSize: 12 }}>(Exited)</span>
                         )}
                       </TableCell>
@@ -1739,6 +1870,7 @@ return (
           </div>
 
           {/* Exit Game button (always visible) */}
+         
           <Dialog open={openExit} onOpenChange={setOpenExit}>
             <DialogTrigger asChild>
               <Button
@@ -1747,7 +1879,7 @@ return (
                 disabled={processingExit}
               >
                 <span role="img" aria-label="exit">🚪</span>
-                               Back to Table Selection
+                Back to Table Selection
               </Button>
             </DialogTrigger>
             <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
@@ -1781,6 +1913,99 @@ return (
           </Dialog>
         </CardContent>
       </Card>
+
+      {/* Edit Profile dialog (always rendered, controlled by openEditProfile state) */}
+      <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
+        <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="editName">New Name</Label>
+            <Input
+              id="editName"
+              value={editName}
+              onChange={handleEditNameChange}
+              className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+              maxLength={30}
+              autoFocus
+            />
+            {editError && (
+              <div className="text-red-500 text-sm mt-2">{editError}</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={async () => {
+                if (!editName.trim()) {
+                  setEditError('Please enter your name.');
+                  return;
+                }
+                setEditSubmitting(true);
+                try {
+                  // Check for existing name (case-insensitive, excluding current user)
+                  const { data: existingPlayers, error } = await supabase
+                    .from('players')
+                    .select('id,name')
+                    .ilike('name', editName.trim());
+
+                  if (error) {
+                    setEditError('Error checking name. Please try again.');
+                    setEditSubmitting(false);
+                    return;
+                  }
+
+                  // Exclude current user's own name from the check
+                  const nameTaken = (existingPlayers || []).some(
+                    (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
+                  );
+
+                  if (nameTaken) {
+                    setEditError('This name already exists. Please provide a new name.');
+                    setEditName('');
+                    setEditSubmitting(false);
+                    return;
+                  }
+
+                  await supabase
+                    .from('players')
+                    .update({ name: editName.trim() })
+                    .eq('id', profile?.id);
+
+                  storage.setProfile({ ...profile, name: editName.trim() });
+
+                  // If current user is admin, update adminName state immediately
+                  if (profile?.id === normalizedAdminId) {
+                    setAdminName(editName.trim());
+                  }
+
+                  setEditSubmitting(false);
+                  setOpenEditProfile(false);
+                  toast.success('Profile updated!');
+
+                  // Broadcast refresh event so all pages update player names
+                  await supabase
+                    .channel('table_' + table.id)
+                    .send({
+                      type: 'broadcast',
+                      event: 'join_refresh',
+                      payload: { updatedPlayer: profile?.id }
+                    });
+
+                  // Local refresh
+                  await refreshTableData(table.id, 'edit profile');
+                } catch (error) {
+                  setEditError('Failed to update profile. Please try again.');
+                  setEditSubmitting(false);
+                }
+              }}
+              disabled={editSubmitting || !editName.trim()}
+            >
+              {editSubmitting ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -1794,4 +2019,3 @@ export default PokerTable;
   The approved points information is maintained in the table:
     buy_ins
 */
-// SUMMARY: Removed local tableState + syncing useEffect (infinite re-render source). Use prop table directly in render.
