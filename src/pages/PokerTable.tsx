@@ -186,6 +186,8 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
     await loadPlayersFromJoinTable(tableId, totals || {});
     await fetchBuyInHistory(tableId);
     await ensureCurrentPlayerActive(tableId);
+    // NEW: load persisted end-up values so UI reflects saved values after refresh/reload
+    await fetchEndUpValues(tableId);
     console.log('[PokerTable][refresh] done', { tableId, source });
   };
 
@@ -1328,6 +1330,80 @@ const handleEditProfileSubmit = async () => {
   }
 };
 
+// ADD: load persisted end-up values for a table
+const fetchEndUpValues = async (tableId?: string) => {
+  const id = tableId || table?.id;
+  if (!id) return;
+  try {
+    const { data, error } = await supabase
+      .from('end_ups')
+      .select('player_id, value')
+      .eq('table_id', id);
+    if (error) {
+      console.warn('[PokerTable][fetchEndUpValues] failed', error);
+      return;
+    }
+    const map: Record<string, number> = {};
+    (data || []).forEach((r: any) => {
+      if (!r || !r.player_id) return;
+      map[r.player_id] = Number(r.value || 0);
+    });
+    setEndUpValues(map);
+    console.log('[PokerTable][fetchEndUpValues] loaded', { tableId: id, count: Object.keys(map).length });
+  } catch (e) {
+    console.error('[PokerTable][fetchEndUpValues] exception', e);
+  }
+};
+
+// REPLACE: Admin action now persists to DB and broadcasts
+const handleSaveEndUp = async () => {
+  if (!table?.id) return;
+  try {
+    // Prepare rows for upsert: one row per player with numeric value
+    const rows = Object.keys(endUpValues).map(pid => ({
+      table_id: table.id,
+      player_id: pid,
+      value: Number(endUpValues[pid] ?? 0),
+      updated_at: new Date().toISOString()
+    }));
+
+    if (rows.length > 0) {
+      // Upsert using composite unique on (table_id, player_id)
+      const { error } = await supabase
+        .from('end_ups')
+        .upsert(rows, { onConflict: 'table_id,player_id' });
+      if (error) {
+        console.error('[PokerTable] handleSaveEndUp upsert failed', error);
+        toast.error('Failed to save end-up values.');
+        return;
+      }
+    } else {
+      // If admin cleared all values locally, delete persisted rows for this table
+      try {
+        await supabase.from('end_ups').delete().eq('table_id', table.id);
+      } catch (e) { /* ignore */ }
+    }
+
+    // Broadcast so other clients update quickly (they listen for end_up_updated)
+    try {
+      await supabase
+        .channel('table_' + table.id)
+        .send({
+          type: 'broadcast',
+          event: 'end_up_updated',
+          payload: { endUpValues }
+        });
+    } catch (e) {
+      console.warn('[PokerTable] handleSaveEndUp broadcast failed (ignored)', e);
+    }
+
+    toast.success('End-up values saved and broadcasted.');
+  } catch (e) {
+    console.error('[PokerTable] handleSaveEndUp failed', e);
+    toast.error('Failed to save end-up values.');
+  }
+};
+
 // Listen for end_up updates so all clients reflect admin-provided values
 useEffect(() => {
   if (!table?.id) return;
@@ -1345,24 +1421,6 @@ useEffect(() => {
     .subscribe();
   return () => { supabase.removeChannel(ch); };
 }, [table?.id]);
-
-// Admin action: save end-up values and broadcast to table participants
-const handleSaveEndUp = async () => {
-  if (!table?.id) return;
-  try {
-    await supabase
-      .channel('table_' + table.id)
-      .send({
-        type: 'broadcast',
-        event: 'end_up_updated',
-        payload: { endUpValues }
-      });
-    toast.success('End-up values saved and broadcasted.');
-  } catch (e) {
-    console.error('[PokerTable] handleSaveEndUp failed', e);
-    toast.error('Failed to save end-up values.');
-  }
-};
 
 return (
     <div

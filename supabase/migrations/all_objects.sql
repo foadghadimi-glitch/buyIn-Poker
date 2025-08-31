@@ -327,3 +327,91 @@ CREATE POLICY "buy_ins_select_all" ON public.buy_ins
   FOR SELECT USING (true);
 
 -- keep insert blocked (enforced via RPC approve_buy_in)
+
+-- =====================================================================
+-- END UPS: store the admin-provided "end up" values per player per table.
+--
+-- Columns:
+--   - id: uuid primary key
+--   - table_id: references poker_tables.id
+--   - player_id: references players.id
+--   - value: numeric (stored as numeric so totals/averages work)
+--   - created_at, updated_at: timestamps
+--   - unique(table_id, player_id) so upserts are simple
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS public.end_ups (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  table_id uuid NOT NULL REFERENCES public.poker_tables(id) ON DELETE CASCADE,
+  player_id uuid NOT NULL REFERENCES public.players(id) ON DELETE CASCADE,
+  value numeric DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Ensure a single row per (table, player)
+CREATE UNIQUE INDEX IF NOT EXISTS end_ups_table_player_idx ON public.end_ups (table_id, player_id);
+
+-- keep updated_at current on changes
+CREATE OR REPLACE FUNCTION public.end_ups_set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_end_ups_updated_at ON public.end_ups;
+CREATE TRIGGER trg_end_ups_updated_at
+BEFORE UPDATE ON public.end_ups
+FOR EACH ROW
+EXECUTE PROCEDURE public.end_ups_set_updated_at();
+
+/*
+  OPTIONAL: convenience upsert function that enforces "only table admin can set values".
+  If you prefer to rely on RLS policies instead, skip this function and add policies below.
+  Note: this function uses auth.uid() available in Postgres contexts when called from
+  a Supabase client with a valid JWT. Marking SECURITY DEFINER allows the function to
+  execute with the function owner's privileges — only enable if you understand the
+  security implications and set proper owner/role.
+
+  Usage from app (recommended): call this RPC instead of direct upsert.
+    SELECT upsert_end_up(p_table_id := '...', p_player_id := '...', p_value := 30.52);
+*/
+
+-- CREATE OR REPLACE FUNCTION public.upsert_end_up(p_table_id uuid, p_player_id uuid, p_value numeric)
+-- RETURNS void
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- BEGIN
+--   IF EXISTS (
+--     SELECT 1 FROM public.poker_tables
+--     WHERE id = p_table_id
+--       AND admin_player_id = auth.uid()::uuid
+--   ) THEN
+--     INSERT INTO public.end_ups (table_id, player_id, value, updated_at)
+--     VALUES (p_table_id, p_player_id, p_value, now())
+--     ON CONFLICT (table_id, player_id)
+--     DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+--   ELSE
+--     RAISE EXCEPTION 'only the table admin may set end_up values';
+--   END IF;
+-- END;
+-- $$;
+
+-- === REPLACE end_ups RLS POLICIES (use ONLY if you accept anonymous writes) ===
+-- WARNING: This removes DB enforcement of "only admin may write". Any client can modify end_ups.
+ALTER TABLE public.end_ups ENABLE ROW LEVEL SECURITY;
+
+-- Allow anyone to read end_up values
+DROP POLICY IF EXISTS end_ups_select_for_participants_or_admin ON public.end_ups;
+CREATE POLICY end_ups_select_all ON public.end_ups
+  FOR SELECT USING (true);
+
+-- Allow anyone to insert/update/delete end_up rows (UNSAFE)
+DROP POLICY IF EXISTS end_ups_manage_by_admin ON public.end_ups;
+CREATE POLICY end_ups_manage_all ON public.end_ups
+  FOR ALL USING (true) WITH CHECK (true);
