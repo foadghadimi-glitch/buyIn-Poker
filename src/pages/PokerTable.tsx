@@ -1862,8 +1862,8 @@ return (
                             <div className="font-medium text-white">
                               {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
                             </div>
-                            <div className="text-sm text-yellow-400">
-                              {`${r.amount >= 0 ? '+' : ''}$${r.amount.toFixed(2)}`}
+                            <div className={`text-sm ${r.amount < 0 ? 'text-red-500' : 'text-yellow-400'}`}>
+                              {`${r.amount >= 0 ? '+' : ''}${r.amount.toFixed(2)}`}
                             </div>
                           </div>
                           <div className="flex gap-2">
