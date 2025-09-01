@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import IndexPage from "./Index";
 import NotFound from "./pages/NotFound";
 import Onboarding from "./pages/Onboarding";
 import TableSelection from "./pages/TableSelection";
@@ -59,13 +58,15 @@ const App = () => {
   };
 
   const handleJoinTable = (joinedTable: PokerTableType) => {
+    // DO NOT set the main table state here.
+    // This keeps the user on the TableSelection page.
     setPendingTable(joinedTable);
     setWaitingApproval(true);
   };
 
   const handleExitTable = () => {
     setTable(null);
-    storage.setTable(null); // Corrected from clearTable
+    storage.setTable(null);
     setWaitingApproval(false);
   };
 
@@ -111,7 +112,6 @@ const App = () => {
               element={<Onboarding onSetProfile={handleSetProfile} />}
             />
             <Route path="/" element={renderContent()} />
-            <Route path="/table/:id" element={<IndexPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

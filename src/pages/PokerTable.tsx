@@ -2048,69 +2048,9 @@ return (
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
-          <form onSubmit={async (e) => {
+          <form onSubmit={(e) => {
             e.preventDefault();
-            if (!editName.trim()) {
-              setEditError('Please enter your name.');
-              return;
-            }
-            setEditSubmitting(true);
-            try {
-              // Check for existing name (case-insensitive, excluding current user)
-              const { data: existingPlayers, error } = await supabase
-                .from('players')
-                .select('id,name')
-                .ilike('name', editName.trim());
-
-              if (error) {
-                setEditError('Error checking name. Please try again.');
-                setEditSubmitting(false);
-                return;
-              }
-
-              // Exclude current user's own name from the check
-              const nameTaken = (existingPlayers || []).some(
-                (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
-              );
-
-              if (nameTaken) {
-                setEditError('This name already exists. Please provide a new name.');
-                setEditName('');
-                setEditSubmitting(false);
-                return;
-              }
-
-              await supabase
-                .from('players')
-                .update({ name: editName.trim() })
-                .eq('id', profile?.id);
-
-              storage.setProfile({ ...profile, name: editName.trim() });
-
-              // If current user is admin, update adminName state immediately
-              if (profile?.id === normalizedAdminId) {
-                setAdminName(editName.trim());
-              }
-
-              setEditSubmitting(false);
-              setOpenEditProfile(false);
-              toast.success('Profile updated!');
-
-              // Broadcast refresh event so all pages update player names
-              await supabase
-                .channel('table_' + table.id)
-                .send({
-                  type: 'broadcast',
-                  event: 'join_refresh',
-                  payload: { updatedPlayer: profile?.id }
-                });
-
-              // Local refresh
-              await refreshTableData(table.id, 'edit profile');
-            } catch (error) {
-              setEditError('Failed to update profile. Please try again.');
-              setEditSubmitting(false);
-            }
+            handleEditProfileSubmit();
           }}>
             <div className="space-y-2">
               <Label htmlFor="editName">New Name</Label>
