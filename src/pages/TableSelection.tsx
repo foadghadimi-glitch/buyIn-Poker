@@ -8,6 +8,8 @@ import { storage } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { Player, PokerTable } from '@/integrations/supabase/types';
+import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 // Update types to match new simplified schema
 type TablePlayer = {
@@ -28,18 +30,22 @@ interface TableSelectionProps {
   onJoinTable: (table: any) => void;
   waitingApproval: boolean;
   profile?: any; // ADDED
+  onSwitchPlayer: () => void;
 }
 
 const TableSelection = ({
   onCreateTable,
   onJoinTable,
   waitingApproval,
-  profile
+  profile,
+  onSwitchPlayer
 }: TableSelectionProps) => {
   const [tableName, setTableName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [openSwitchPlayerDialog, setOpenSwitchPlayerDialog] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     console.log('[TableSelection] waitingApproval changed:', waitingApproval);
@@ -53,6 +59,13 @@ const TableSelection = ({
     console.log('[TableSelection] props.table:', storage.getTable());
     console.log('[TableSelection] props.waitingApproval:', waitingApproval);
   }, [waitingApproval, tableName, joinCode]);
+
+  const handleSwitchPlayer = () => {
+    storage.setProfile(null);
+    storage.setTable(null);
+    onSwitchPlayer();
+    navigate('/onboarding');
+  };
 
   const handleCreate = async () => {
     if (!tableName.trim()) {
@@ -296,6 +309,42 @@ const TableSelection = ({
             </CardContent>
           </Card>
         )}
+      </div>
+
+      {/* Button to go back to profile creation */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+        <Dialog open={openSwitchPlayerDialog} onOpenChange={setOpenSwitchPlayerDialog}>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              className="text-white/70 hover:text-white hover:bg-white/10 text-sm"
+            >
+              Back to Profile Creation
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+            <DialogHeader>
+              <DialogTitle>Are you sure?</DialogTitle>
+              <DialogDescription className="text-gray-300 pt-2">
+                This will clear your current player session from this browser. You will be treated as a new player and will need to create a new profile if your original name is already taken.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setOpenSwitchPlayerDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setOpenSwitchPlayerDialog(false);
+                  handleSwitchPlayer();
+                }}
+              >
+                Continue
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

@@ -2,60 +2,122 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import IndexPage from "./Index";
 import NotFound from "./pages/NotFound";
+import Onboarding from "./pages/Onboarding";
+import TableSelection from "./pages/TableSelection";
+import PokerTable from "./pages/PokerTable";
 import { storage } from "./utils/storage";
+import { Player, PokerTable as PokerTableType } from "./integrations/supabase/types";
+import { supabase } from "./integrations/supabase/client";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        {process.env.NODE_ENV === "development" && (
-          <button
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Are you sure you want to clear all local data and reset the application?"
-                )
-              ) {
-                // ADDED: set reset flag so Index.tsx can safely skip persisting stale state
-                try { sessionStorage.setItem('is_resetting', 'true'); } catch {}
-                storage.clearAll();
-                window.location.href = "/";
-              }
-            }}
-            style={{
-              position: "fixed",
-              bottom: "10px",
-              right: "10px",
-              zIndex: 10000,
-              padding: "8px 12px",
-              backgroundColor: "rgba(220, 38, 38, 0.85)",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.4)",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "12px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
-            }}
-          >
-            Reset App
-          </button>
-        )}
+const App = () => {
+  const [profile, setProfile] = useState<Player | null>(storage.getProfile());
+  const [table, setTable] = useState<PokerTableType | null>(storage.getTable());
+  const [waitingApproval, setWaitingApproval] = useState(false);
+  const [pendingTable, setPendingTable] = useState<PokerTableType | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-        <Routes>
-          <Route path="/" element={<IndexPage />} />
-          <Route path="/table/:id" element={<IndexPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+  useEffect(() => {
+    const tableToWatch = table || pendingTable;
+    if (profile && tableToWatch) {
+      const channel = supabase
+        .channel("user_" + profile.id)
+        .on("broadcast", { event: "join_approved" }, (payload) => {
+          if (payload.payload.tableId === tableToWatch.id) {
+            setWaitingApproval(false);
+            setPendingTable(null);
+            setTable(tableToWatch);
+            storage.setTable(tableToWatch);
+            setRefreshKey((prev) => prev + 1);
+          }
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [profile, table, pendingTable]);
+
+  const handleSetProfile = (newProfile: Player | null) => {
+    setProfile(newProfile);
+    if (!newProfile) {
+      storage.setProfile(null);
+      storage.setTable(null);
+      setTable(null);
+    }
+  };
+
+  const handleCreateTable = (newTable: PokerTableType) => {
+    setTable(newTable);
+    storage.setTable(newTable);
+  };
+
+  const handleJoinTable = (joinedTable: PokerTableType) => {
+    setPendingTable(joinedTable);
+    setWaitingApproval(true);
+  };
+
+  const handleExitTable = () => {
+    setTable(null);
+    storage.setTable(null); // Corrected from clearTable
+    setWaitingApproval(false);
+  };
+
+  const handleSwitchPlayer = () => {
+    handleSetProfile(null);
+  };
+
+  const renderContent = () => {
+    if (!profile) {
+      return <Navigate to="/onboarding" replace />;
+    }
+    if (!table) {
+      return (
+        <TableSelection
+          profile={profile}
+          table={table}
+          onCreateTable={handleCreateTable}
+          onJoinTable={handleJoinTable}
+          waitingApproval={waitingApproval}
+          onSwitchPlayer={handleSwitchPlayer}
+        />
+      );
+    }
+    return (
+      <PokerTable
+        table={table}
+        profile={profile}
+        onExit={handleExitTable}
+        refreshKey={refreshKey}
+      />
+    );
+  };
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/onboarding"
+              element={<Onboarding onSetProfile={handleSetProfile} />}
+            />
+            <Route path="/" element={renderContent()} />
+            <Route path="/table/:id" element={<IndexPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
