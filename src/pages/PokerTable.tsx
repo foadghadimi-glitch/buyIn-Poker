@@ -125,6 +125,12 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
   const [processingRequests, setProcessingRequests] = useState<string[]>([]);
   const [processingJoinRequests, setProcessingJoinRequests] = useState<string[]>([]);
   const [processingExit, setProcessingExit] = useState(false);
+  // prevent double-submit from UI for buy-in and join actions
+  const [processingBuyIn, setProcessingBuyIn] = useState(false);
+  const [processingJoinRequestLocal, setProcessingJoinRequestLocal] = useState(false);
+  // synchronous refs to prevent double-submit race before state updates
+  const processingBuyInRef = useRef(false);
+  const processingJoinRef = useRef(false);
   const [adminName, setAdminName] = useState<string>('');
 
   const handleEndUpChange = (playerId: string, value: number) => {
@@ -772,6 +778,11 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
   // Handler to request a buy-in from a player (used by the Buy-in dialog)
   const handleRequestBuyIn = async () => {
     if (!table || !profile) return;
+    if (processingBuyIn) {
+      // already submitting
+      return;
+    }
+    setProcessingBuyIn(true);
     console.log('[PokerTable][handleRequestBuyIn] submitting request', {
       tableId: table.id,
       playerId: profile.id,
@@ -794,50 +805,53 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
         toast.error('Failed to request buy-in.');
         return;
       }
+      // Notify admin (best-effort)
+      try {
+        const adminId = table?.admin_player_id ?? (table as any)?.adminId;
+        if (adminId) {
+          await supabase
+            .channel('user_' + adminId)
+            .send({
+              type: 'broadcast',
+              event: 'buy_in_request_created',
+              payload: { requestId: buyInReq.id, playerName: profile?.name, tableId: table.id }
+            });
+        }
+      } catch (e) {
+        console.warn('[PokerTable] buy_in_request broadcast failed (ignored):', e);
+      }
+
+      // Admin local refresh + admin-specific toast
+      if (isAdmin) {
+        try {
+          const { data: reqs, error: fetchErr } = await supabase
+            .from('buy_in_requests')
+            .select('*')
+            .eq('table_id', table.id)
+            .eq('status', 'pending');
+          if (!fetchErr) setPendingRequests(reqs || []);
+        } catch (e) {
+          console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
+        }
+        toast('New buy-in request', { description: `${profile?.name || 'You'} requested a buy-in` });
+      }
+
+      toast.success('Buy-in request sent', {
+        description: 'The table admin has been notified.'
+      });
+
+      // Reset processing state after successful request
+      processingBuyInRef.current = false;
+      setProcessingBuyIn(false);
+      setOpenBuyIn(false);
+      setAmount('');
     } catch (e) {
       console.error('[PokerTable] Exception inserting buy_in_request:', e);
       toast.error('Failed to request buy-in.');
-      return;
+      // Reset on error as well
+      processingBuyInRef.current = false;
+      setProcessingBuyIn(false);
     }
-
-    // Notify admin (best-effort)
-    try {
-      const adminId = table?.admin_player_id ?? (table as any)?.adminId;
-      if (adminId) {
-        await supabase
-          .channel('user_' + adminId)
-          .send({
-            type: 'broadcast',
-            event: 'buy_in_request_created',
-            payload: { requestId: buyInReq.id, playerName: profile?.name, tableId: table.id }
-          });
-      }
-    } catch (e) {
-      console.warn('[PokerTable] buy_in_request broadcast failed (ignored):', e);
-    }
-
-    // Admin local refresh + admin-specific toast
-    if (isAdmin) {
-      try {
-        const { data: reqs, error: fetchErr } = await supabase
-          .from('buy_in_requests')
-          .select('*')
-          .eq('table_id', table.id)
-          .eq('status', 'pending');
-        if (!fetchErr) setPendingRequests(reqs || []);
-      } catch (e) {
-        console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
-      }
-      toast('New buy-in request', { description: `${profile?.name || 'You'} requested a buy-in` });
-    }
-
-    // SUCCESS feedback for requester (admin or regular)
-    toast.success('Buy-in request sent', {
-      description: 'The table admin has been notified.'
-    });
-
-    setOpenBuyIn(false);
-    setAmount('');
   };
 
 // Handler for requesting to join a table (regular players)
@@ -846,6 +860,9 @@ const handleRequestJoin = async () => {
   if (!table?.id || !playerId) {
     toast.error('Cannot join: missing table or profile info.');
     console.error('[PokerTable.handleRequestJoin] Aborted: missing table or profile ID.', { tableId: table?.id, playerId });
+    return;
+  }
+  if (processingJoinRequestLocal) {
     return;
   }
 
@@ -901,7 +918,12 @@ const handleRequestJoin = async () => {
 
   if (existingReq) {
     console.log(`[PokerTable.handleRequestJoin] User ${playerId} already has a pending request (ID: ${existingReq.id}). Not creating a new one.`);
-    setPendingJoinPlayerIds(prev => new Set(prev).add(playerId));
+    // ensure UI shows pending immediately
+    setPendingJoinPlayerIds(prev => {
+      const next = new Set(prev);
+      next.add(playerId);
+      return next;
+    });
     toast('Your join request is still pending.');
     return;
   }
@@ -910,6 +932,13 @@ const handleRequestJoin = async () => {
 
   // Create a new join request
   try {
+    setProcessingJoinRequestLocal(true);
+    // optimistic UI: mark as pending immediately to avoid double-click race
+    setPendingJoinPlayerIds(prev => {
+      const next = new Set(prev);
+      next.add(playerId);
+      return next;
+    });
     const newRequestId = uuidv4();
     const { error: insertError } = await supabase
       .from('join_requests')
@@ -922,6 +951,12 @@ const handleRequestJoin = async () => {
       });
     if (insertError) {
       console.error('[PokerTable] insert join_request failed:', insertError);
+      // revert optimistic pending marker
+      setPendingJoinPlayerIds(prev => {
+        const next = new Set(prev);
+        next.delete(playerId);
+        return next;
+      });
       toast('Failed to create join request');
       return;
     }
@@ -943,16 +978,19 @@ const handleRequestJoin = async () => {
     }
 
     // Update local pending markers so UI shows the pending state immediately
-    setPendingJoinPlayerIds(prev => {
-      const next = new Set(prev);
-      next.add(playerId);
-      return next;
-    });
     setPendingJoinRequests(prev => [...prev, { id: newRequestId, player_id: playerId, player_name: profile.name }]);
     toast('Join request sent');
   } catch (e) {
     console.error('[PokerTable] handleRequestJoin error:', e);
+    // revert optimistic pending marker on unexpected error
+    setPendingJoinPlayerIds(prev => {
+      const next = new Set(prev);
+      next.delete(playerId);
+      return next;
+    });
     toast('Failed to send join request');
+  } finally {
+    setProcessingJoinRequestLocal(false);
   }
 };
 
@@ -1446,8 +1484,30 @@ return (
           {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
             <div className="mb-6 p-4 border rounded-lg bg-black/50 border-blue-400/50">
               <h3 className="font-semibold text-lg mb-2 text-white">You are viewing this table as a spectator.</h3>
+              {/* If profile is missing, explain cause & recovery */}
+              {!profile && (
+                <p className="text-sm text-yellow-300 mb-2">
+                  Your local profile or table selection is missing. This happens if you cleared browser storage/cache or restarted the device — it removes only the local identity and selection. Server data (tables, players, join requests, buy-ins, end-up values) is still intact.
+                  To recover: open Onboarding to recreate your profile, then request to join this table or ask the admin to re-add your player row.
+                </p>
+              )}
+              {/* NEW: magic link explanation for authenticated users */}
+              {/*
+                If the user signed up using an email magic-link (or another auth provider),
+                clicking the sign-in link later will restore the same server-linked profile
+                (Jack) on any device where you complete the sign-in. Magic links create an
+                auth session that persists until it expires or you sign out. If you used the
+                anonymous/no-auth flow instead, save a recovery token or sign in with email
+                to enable cross-device/profile recovery.
+              */}
+              {(!profile && false) && null}
               <p className="text-sm text-gray-300 mb-4">To participate, request to join. The admin will need to approve your request.</p>
-              <Button onClick={handleRequestJoin} className="w-full" variant="hero">
+              <Button
+                onClick={handleRequestJoin}
+                className="w-full"
+                variant="hero"
+                disabled={processingJoinRequestLocal || pendingJoinPlayerIds.has(profile?.id || '')}
+              >
                 <span role="img" aria-label="join">👋</span> Request to Join Table
               </Button>
             </div>
@@ -1473,20 +1533,34 @@ return (
                     <DialogHeader>
                       <DialogTitle>Request Buy-in</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-2">
+                    {/* Use a form so Enter key submits */}
+                    <form
+                      onSubmit={e => {
+                        e.preventDefault();
+                        // synchronous guard prevents double-submit before state updates
+                        if (processingBuyInRef.current || !amount.trim()) return;
+                        processingBuyInRef.current = true;
+                        setProcessingBuyIn(true);
+                        handleRequestBuyIn();
+                      }}
+                      className="space-y-2"
+                    >
                       <Label htmlFor="amount">Amount (can be positive or negative)</Label>
                       <Input
                         id="amount"
                         type="number"
                         inputMode="decimal"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={e => setAmount(e.target.value)}
                         className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                        autoFocus
                       />
-                    </div>
-                    <DialogFooter>
-                      <Button onClick={handleRequestBuyIn}>Submit</Button>
-                    </DialogFooter>
+                      <DialogFooter>
+                        <Button type="submit" disabled={processingBuyInRef.current || !amount.trim()}>
+                          {processingBuyIn ? 'Sending...' : 'Submit'}
+                        </Button>
+                      </DialogFooter>
+                    </form>
                   </DialogContent>
                 </Dialog>
 
@@ -1590,8 +1664,8 @@ return (
                       style={{
                         display: 'inline-block',
                         padding: '4px',
-                        minHeight: '700px',
-                        maxHeight: '100vh'
+                        minHeight: '550px',
+                        maxHeight: '90vh'
                       }}
                     >
                       <DialogHeader>
@@ -1600,8 +1674,8 @@ return (
                       <div
                         style={{
                           fontSize: '10px',
-                          height: '600px',
-                          maxHeight: '80vh',
+                          height: '450px',
+                          maxHeight: '70vh',
                           overflowX: 'auto',
                           overflowY: 'auto',
                           padding: '0'
@@ -1726,7 +1800,6 @@ return (
                               }}>
                                 {Object.values(endUpValues).reduce((sum, v) => sum + parseFloat(String(v)), 0)}
                               </TableCell>
-                              {/* NEW COLUMN TOTAL */}
                               <TableCell style={{
                                 textAlign: 'center',
                                 fontSize: '12px',
@@ -1735,15 +1808,12 @@ return (
                                 verticalAlign: 'middle'
                               }}>
                                 {
-                                  // Sum of (endUp - totalBuyIns) / 7 for all players
                                   players.length > 0
-                                    ? (
-                                      players.reduce((sum: number, p: any) => {
+                                    ? players.reduce((sum: number, p: any) => {
                                         const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
                                         const endUp = endUpValues[p.id] ?? 0;
-                                        return sum + (endUp - totalBuyIns) / 7;
+                                                                               return sum + (endUp - totalBuyIns) / 7;
                                       }, 0).toFixed(2)
-                                    )
                                     : '0.00'
                                 }
                               </TableCell>
@@ -1760,9 +1830,9 @@ return (
                           </Button>
                         )}
                       </DialogFooter>
-                     </DialogContent>
-                   </Dialog>
-                 )}
+                    </DialogContent>
+                  </Dialog>
+                )}
                 {/* Edit Profile button - placed immediately after End Up button */}
                 <Button
                   variant="outline"
@@ -1792,8 +1862,8 @@ return (
                             <div className="font-medium text-white">
                               {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
                             </div>
-                            <div className="text-sm text-yellow-400">
-                              {`${r.amount >= 0 ? '+' : ''}$${r.amount.toFixed(2)}`}
+                            <div className={`text-sm ${r.amount < 0 ? 'text-red-500' : 'text-yellow-400'}`}>
+                              {`${r.amount >= 0 ? '+' : ''}${r.amount.toFixed(2)}`}
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -1978,90 +2048,93 @@ return (
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="editName">New Name</Label>
-            <Input
-              id="editName"
-              value={editName}
-              onChange={handleEditNameChange}
-              className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-              maxLength={30}
-              autoFocus
-            />
-            {editError && (
-              <div className="text-red-500 text-sm mt-2">{editError}</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={async () => {
-                if (!editName.trim()) {
-                  setEditError('Please enter your name.');
-                  return;
-                }
-                setEditSubmitting(true);
-                try {
-                  // Check for existing name (case-insensitive, excluding current user)
-                  const { data: existingPlayers, error } = await supabase
-                    .from('players')
-                    .select('id,name')
-                    .ilike('name', editName.trim());
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!editName.trim()) {
+              setEditError('Please enter your name.');
+              return;
+            }
+            setEditSubmitting(true);
+            try {
+              // Check for existing name (case-insensitive, excluding current user)
+              const { data: existingPlayers, error } = await supabase
+                .from('players')
+                .select('id,name')
+                .ilike('name', editName.trim());
 
-                  if (error) {
-                    setEditError('Error checking name. Please try again.');
-                    setEditSubmitting(false);
-                    return;
-                  }
+              if (error) {
+                setEditError('Error checking name. Please try again.');
+                setEditSubmitting(false);
+                return;
+              }
 
-                  // Exclude current user's own name from the check
-                  const nameTaken = (existingPlayers || []).some(
-                    (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
-                  );
+              // Exclude current user's own name from the check
+              const nameTaken = (existingPlayers || []).some(
+                (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
+              );
 
-                  if (nameTaken) {
-                    setEditError('This name already exists. Please provide a new name.');
-                    setEditName('');
-                    setEditSubmitting(false);
-                    return;
-                  }
+              if (nameTaken) {
+                setEditError('This name already exists. Please provide a new name.');
+                setEditName('');
+                setEditSubmitting(false);
+                return;
+              }
 
-                  await supabase
-                    .from('players')
-                    .update({ name: editName.trim() })
-                    .eq('id', profile?.id);
+              await supabase
+                .from('players')
+                .update({ name: editName.trim() })
+                .eq('id', profile?.id);
 
-                  storage.setProfile({ ...profile, name: editName.trim() });
+              storage.setProfile({ ...profile, name: editName.trim() });
 
-                  // If current user is admin, update adminName state immediately
-                  if (profile?.id === normalizedAdminId) {
-                    setAdminName(editName.trim());
-                  }
+              // If current user is admin, update adminName state immediately
+              if (profile?.id === normalizedAdminId) {
+                setAdminName(editName.trim());
+              }
 
-                  setEditSubmitting(false);
-                  setOpenEditProfile(false);
-                  toast.success('Profile updated!');
+              setEditSubmitting(false);
+              setOpenEditProfile(false);
+              toast.success('Profile updated!');
 
-                  // Broadcast refresh event so all pages update player names
-                  await supabase
-                    .channel('table_' + table.id)
-                    .send({
-                      type: 'broadcast',
-                      event: 'join_refresh',
-                      payload: { updatedPlayer: profile?.id }
-                    });
+              // Broadcast refresh event so all pages update player names
+              await supabase
+                .channel('table_' + table.id)
+                .send({
+                  type: 'broadcast',
+                  event: 'join_refresh',
+                  payload: { updatedPlayer: profile?.id }
+                });
 
-                  // Local refresh
-                  await refreshTableData(table.id, 'edit profile');
-                } catch (error) {
-                  setEditError('Failed to update profile. Please try again.');
-                  setEditSubmitting(false);
-                }
-              }}
-              disabled={editSubmitting || !editName.trim()}
-            >
-              {editSubmitting ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
+              // Local refresh
+              await refreshTableData(table.id, 'edit profile');
+            } catch (error) {
+              setEditError('Failed to update profile. Please try again.');
+              setEditSubmitting(false);
+            }
+          }}>
+            <div className="space-y-2">
+              <Label htmlFor="editName">New Name</Label>
+              <Input
+                id="editName"
+                value={editName}
+                onChange={handleEditNameChange}
+                className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                maxLength={30}
+                autoFocus
+              />
+              {editError && (
+                <div className="text-red-500 text-sm mt-2">{editError}</div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={editSubmitting || !editName.trim()}
+              >
+                {editSubmitting ? 'Saving...' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
