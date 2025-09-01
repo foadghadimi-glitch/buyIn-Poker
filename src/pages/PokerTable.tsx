@@ -1664,8 +1664,8 @@ return (
                       style={{
                         display: 'inline-block',
                         padding: '4px',
-                        minHeight: '700px',
-                        maxHeight: '100vh'
+                        minHeight: '550px',
+                        maxHeight: '90vh'
                       }}
                     >
                       <DialogHeader>
@@ -1674,8 +1674,8 @@ return (
                       <div
                         style={{
                           fontSize: '10px',
-                          height: '600px',
-                          maxHeight: '80vh',
+                          height: '450px',
+                          maxHeight: '70vh',
                           overflowX: 'auto',
                           overflowY: 'auto',
                           padding: '0'
