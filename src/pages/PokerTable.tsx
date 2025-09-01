@@ -128,6 +128,9 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
   // prevent double-submit from UI for buy-in and join actions
   const [processingBuyIn, setProcessingBuyIn] = useState(false);
   const [processingJoinRequestLocal, setProcessingJoinRequestLocal] = useState(false);
+  // synchronous refs to prevent double-submit race before state updates
+  const processingBuyInRef = useRef(false);
+  const processingJoinRef = useRef(false);
   const [adminName, setAdminName] = useState<string>('');
 
   const handleEndUpChange = (playerId: string, value: number) => {
@@ -802,53 +805,53 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
         toast.error('Failed to request buy-in.');
         return;
       }
+      // Notify admin (best-effort)
+      try {
+        const adminId = table?.admin_player_id ?? (table as any)?.adminId;
+        if (adminId) {
+          await supabase
+            .channel('user_' + adminId)
+            .send({
+              type: 'broadcast',
+              event: 'buy_in_request_created',
+              payload: { requestId: buyInReq.id, playerName: profile?.name, tableId: table.id }
+            });
+        }
+      } catch (e) {
+        console.warn('[PokerTable] buy_in_request broadcast failed (ignored):', e);
+      }
+
+      // Admin local refresh + admin-specific toast
+      if (isAdmin) {
+        try {
+          const { data: reqs, error: fetchErr } = await supabase
+            .from('buy_in_requests')
+            .select('*')
+            .eq('table_id', table.id)
+            .eq('status', 'pending');
+          if (!fetchErr) setPendingRequests(reqs || []);
+        } catch (e) {
+          console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
+        }
+        toast('New buy-in request', { description: `${profile?.name || 'You'} requested a buy-in` });
+      }
+
+      toast.success('Buy-in request sent', {
+        description: 'The table admin has been notified.'
+      });
+
+      // Reset processing state after successful request
+      processingBuyInRef.current = false;
+      setProcessingBuyIn(false);
+      setOpenBuyIn(false);
+      setAmount('');
     } catch (e) {
       console.error('[PokerTable] Exception inserting buy_in_request:', e);
       toast.error('Failed to request buy-in.');
-      return;
-    }
-    finally {
+      // Reset on error as well
+      processingBuyInRef.current = false;
       setProcessingBuyIn(false);
     }
-
-    // Notify admin (best-effort)
-    try {
-      const adminId = table?.admin_player_id ?? (table as any)?.adminId;
-      if (adminId) {
-        await supabase
-          .channel('user_' + adminId)
-          .send({
-            type: 'broadcast',
-            event: 'buy_in_request_created',
-            payload: { requestId: buyInReq.id, playerName: profile?.name, tableId: table.id }
-          });
-      }
-    } catch (e) {
-      console.warn('[PokerTable] buy_in_request broadcast failed (ignored):', e);
-    }
-
-    // Admin local refresh + admin-specific toast
-    if (isAdmin) {
-      try {
-        const { data: reqs, error: fetchErr } = await supabase
-          .from('buy_in_requests')
-          .select('*')
-          .eq('table_id', table.id)
-          .eq('status', 'pending');
-        if (!fetchErr) setPendingRequests(reqs || []);
-      } catch (e) {
-        console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
-      }
-      toast('New buy-in request', { description: `${profile?.name || 'You'} requested a buy-in` });
-    }
-
-    // SUCCESS feedback for requester (admin or regular)
-    toast.success('Buy-in request sent', {
-      description: 'The table admin has been notified.'
-    });
-
-    setOpenBuyIn(false);
-    setAmount('');
   };
 
 // Handler for requesting to join a table (regular players)
@@ -1530,22 +1533,34 @@ return (
                     <DialogHeader>
                       <DialogTitle>Request Buy-in</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-2">
+                    {/* Use a form so Enter key submits */}
+                    <form
+                      onSubmit={e => {
+                        e.preventDefault();
+                        // synchronous guard prevents double-submit before state updates
+                        if (processingBuyInRef.current || !amount.trim()) return;
+                        processingBuyInRef.current = true;
+                        setProcessingBuyIn(true);
+                        handleRequestBuyIn();
+                      }}
+                      className="space-y-2"
+                    >
                       <Label htmlFor="amount">Amount (can be positive or negative)</Label>
                       <Input
                         id="amount"
                         type="number"
                         inputMode="decimal"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={e => setAmount(e.target.value)}
                         className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                        autoFocus
                       />
-                    </div>
-                    <DialogFooter>
-                      <Button onClick={handleRequestBuyIn} disabled={processingBuyIn || !amount.trim()}>
-                        {processingBuyIn ? 'Sending...' : 'Submit'}
-                      </Button>
-                    </DialogFooter>
+                      <DialogFooter>
+                        <Button type="submit" disabled={processingBuyInRef.current || !amount.trim()}>
+                          {processingBuyIn ? 'Sending...' : 'Submit'}
+                        </Button>
+                      </DialogFooter>
+                    </form>
                   </DialogContent>
                 </Dialog>
 
@@ -1797,7 +1812,7 @@ return (
                                     ? players.reduce((sum: number, p: any) => {
                                         const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
                                         const endUp = endUpValues[p.id] ?? 0;
-                                        return sum + (endUp - totalBuyIns) / 7;
+                                                                               return sum + (endUp - totalBuyIns) / 7;
                                       }, 0).toFixed(2)
                                     : '0.00'
                                 }
