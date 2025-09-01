@@ -228,54 +228,58 @@ const TableSelection = ({
           <CardHeader>
             <CardTitle className="text-white text-center text-2xl">Create a New Poker Table</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Label htmlFor="tableName" className="text-lg font-semibold text-gray-200">Table Name</Label>
-              <Input
-                id="tableName"
-                placeholder="e.g., Friday Night Poker"
-                value={tableName}
-                onChange={(e) => setTableName(e.target.value)}
-                className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleCreate} 
-              disabled={isCreating} 
-              className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 text-white"
-            >
-              {isCreating ? 'Creating...' : 'Create Table'}
-            </Button>
-          </CardFooter>
+          <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
+            <CardContent>
+              <div className="space-y-4">
+                <Label htmlFor="tableName" className="text-lg font-semibold text-gray-200">Table Name</Label>
+                <Input
+                  id="tableName"
+                  placeholder="e.g., Friday Night Poker"
+                  value={tableName}
+                  onChange={(e) => setTableName(e.target.value)}
+                  className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                type="submit"
+                disabled={isCreating}
+                className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isCreating ? 'Creating...' : 'Create Table'}
+              </Button>
+            </CardFooter>
+          </form>
         </Card>
 
         <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
           <CardHeader>
             <CardTitle className="text-white text-center text-2xl">Join a Poker Table</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Label htmlFor="joinCode" className="text-lg font-semibold text-gray-200">Join Code</Label>
-              <Input
-                id="joinCode"
-                placeholder="1234"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-mono"
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleJoin} 
-              disabled={isJoining || waitingApproval} 
-              className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {isJoining ? 'Joining...' : 'Join Table'}
-            </Button>
-          </CardFooter>
+          <form onSubmit={(e) => { e.preventDefault(); handleJoin(); }}>
+            <CardContent>
+              <div className="space-y-4">
+                <Label htmlFor="joinCode" className="text-lg font-semibold text-gray-200">Join Code</Label>
+                <Input
+                  id="joinCode"
+                  placeholder="1234"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-mono"
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                type="submit"
+                disabled={isJoining || waitingApproval}
+                className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isJoining ? 'Joining...' : 'Join Table'}
+              </Button>
+            </CardFooter>
+          </form>
         </Card>
 
         {/* ADDED: Display this card when waiting for approval, instead of navigating away */}

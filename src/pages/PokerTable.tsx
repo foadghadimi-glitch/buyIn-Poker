@@ -2048,90 +2048,93 @@ return (
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="editName">New Name</Label>
-            <Input
-              id="editName"
-              value={editName}
-              onChange={handleEditNameChange}
-              className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-              maxLength={30}
-              autoFocus
-            />
-            {editError && (
-              <div className="text-red-500 text-sm mt-2">{editError}</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={async () => {
-                if (!editName.trim()) {
-                  setEditError('Please enter your name.');
-                  return;
-                }
-                setEditSubmitting(true);
-                try {
-                  // Check for existing name (case-insensitive, excluding current user)
-                  const { data: existingPlayers, error } = await supabase
-                    .from('players')
-                    .select('id,name')
-                    .ilike('name', editName.trim());
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!editName.trim()) {
+              setEditError('Please enter your name.');
+              return;
+            }
+            setEditSubmitting(true);
+            try {
+              // Check for existing name (case-insensitive, excluding current user)
+              const { data: existingPlayers, error } = await supabase
+                .from('players')
+                .select('id,name')
+                .ilike('name', editName.trim());
 
-                  if (error) {
-                    setEditError('Error checking name. Please try again.');
-                    setEditSubmitting(false);
-                    return;
-                  }
+              if (error) {
+                setEditError('Error checking name. Please try again.');
+                setEditSubmitting(false);
+                return;
+              }
 
-                  // Exclude current user's own name from the check
-                  const nameTaken = (existingPlayers || []).some(
-                    (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
-                  );
+              // Exclude current user's own name from the check
+              const nameTaken = (existingPlayers || []).some(
+                (p: any) => p.name?.toLowerCase() === editName.trim().toLowerCase() && p.id !== profile?.id
+              );
 
-                  if (nameTaken) {
-                    setEditError('This name already exists. Please provide a new name.');
-                    setEditName('');
-                    setEditSubmitting(false);
-                    return;
-                  }
+              if (nameTaken) {
+                setEditError('This name already exists. Please provide a new name.');
+                setEditName('');
+                setEditSubmitting(false);
+                return;
+              }
 
-                  await supabase
-                    .from('players')
-                    .update({ name: editName.trim() })
-                    .eq('id', profile?.id);
+              await supabase
+                .from('players')
+                .update({ name: editName.trim() })
+                .eq('id', profile?.id);
 
-                  storage.setProfile({ ...profile, name: editName.trim() });
+              storage.setProfile({ ...profile, name: editName.trim() });
 
-                  // If current user is admin, update adminName state immediately
-                  if (profile?.id === normalizedAdminId) {
-                    setAdminName(editName.trim());
-                  }
+              // If current user is admin, update adminName state immediately
+              if (profile?.id === normalizedAdminId) {
+                setAdminName(editName.trim());
+              }
 
-                  setEditSubmitting(false);
-                  setOpenEditProfile(false);
-                  toast.success('Profile updated!');
+              setEditSubmitting(false);
+              setOpenEditProfile(false);
+              toast.success('Profile updated!');
 
-                  // Broadcast refresh event so all pages update player names
-                  await supabase
-                    .channel('table_' + table.id)
-                    .send({
-                      type: 'broadcast',
-                      event: 'join_refresh',
-                      payload: { updatedPlayer: profile?.id }
-                    });
+              // Broadcast refresh event so all pages update player names
+              await supabase
+                .channel('table_' + table.id)
+                .send({
+                  type: 'broadcast',
+                  event: 'join_refresh',
+                  payload: { updatedPlayer: profile?.id }
+                });
 
-                  // Local refresh
-                  await refreshTableData(table.id, 'edit profile');
-                } catch (error) {
-                  setEditError('Failed to update profile. Please try again.');
-                  setEditSubmitting(false);
-                }
-              }}
-              disabled={editSubmitting || !editName.trim()}
-            >
-              {editSubmitting ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
+              // Local refresh
+              await refreshTableData(table.id, 'edit profile');
+            } catch (error) {
+              setEditError('Failed to update profile. Please try again.');
+              setEditSubmitting(false);
+            }
+          }}>
+            <div className="space-y-2">
+              <Label htmlFor="editName">New Name</Label>
+              <Input
+                id="editName"
+                value={editName}
+                onChange={handleEditNameChange}
+                className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                maxLength={30}
+                autoFocus
+              />
+              {editError && (
+                <div className="text-red-500 text-sm mt-2">{editError}</div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={editSubmitting || !editName.trim()}
+              >
+                {editSubmitting ? 'Saving...' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -84,12 +84,6 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSubmit();
-    }
-  };
-
   return (
     <div
       className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-center bg-cover"
@@ -113,33 +107,34 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold text-white mb-2">Welcome to the Poker Table</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <Label htmlFor="name" className="text-lg font-semibold text-gray-200">Player Name</Label>
-            <Input
-              id="name"
-              placeholder="Enter your name"
-              value={name}
-              onChange={handleNameChange}
-              className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
-              onKeyPress={handleKeyPress}
-              maxLength={30}
-              autoFocus
-            />
-            {error && (
-              <div className="text-red-500 text-sm mt-2">{error}</div>
-            )}
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={isSubmitting || !name.trim()}
-            className="w-full h-14 text-lg font-bold btn-poker primary bg-green-600 hover:bg-green-700 text-white py-6"
-          >
-            {isSubmitting ? 'Joining...' : 'Join the Poker Table'}
-          </Button>
-        </CardFooter>
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+          <CardContent>
+            <div className="space-y-4">
+              <Label htmlFor="name" className="text-lg font-semibold text-gray-200">Player Name</Label>
+              <Input
+                id="name"
+                placeholder="Enter your name"
+                value={name}
+                onChange={handleNameChange}
+                className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
+                maxLength={30}
+                autoFocus
+              />
+              {error && (
+                <div className="text-red-500 text-sm mt-2">{error}</div>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button
+              type="submit"
+              disabled={isSubmitting || !name.trim()}
+              className="w-full h-14 text-lg font-bold btn-poker primary bg-green-600 hover:bg-green-700 text-white py-6"
+            >
+              {isSubmitting ? 'Joining...' : 'Join the Poker Table'}
+            </Button>
+          </CardFooter>
+        </form>
       </Card>
     </div>
   );
