@@ -1363,8 +1363,8 @@ const fetchEndUpValues = async (tableId?: string) => {
   if (!id) return;
   try {
     const { data, error } = await supabase
-      .from('table_endups')
-      .select('player_id, endup')
+      .from('end_ups')
+      .select('player_id, value')
       .eq('table_id', id);
     if (error) {
       console.warn('[PokerTable][fetchEndUpValues] failed', error);
@@ -1373,7 +1373,7 @@ const fetchEndUpValues = async (tableId?: string) => {
     const map: Record<string, number> = {};
     (data || []).forEach((r: any) => {
       if (!r || !r.player_id) return;
-      map[r.player_id] = Number(r.endup || 0);
+      map[r.player_id] = Number(r.value || 0);
     });
     setEndUpValues(map);
     console.log('[PokerTable][fetchEndUpValues] loaded', { tableId: id, count: Object.keys(map).length });
@@ -1390,14 +1390,14 @@ const handleSaveEndUp = async () => {
     const rows = Object.keys(endUpValues).map(pid => ({
       table_id: table.id,
       player_id: pid,
-      endup: Number(endUpValues[pid] ?? 0),
+      value: Number(endUpValues[pid] ?? 0),
       updated_at: new Date().toISOString()
     }));
 
     if (rows.length > 0) {
       // Upsert using composite unique on (table_id, player_id)
       const { error } = await supabase
-        .from('table_endups')
+        .from('end_ups')
         .upsert(rows, { onConflict: 'table_id,player_id' });
       if (error) {
         console.error('[PokerTable] handleSaveEndUp upsert failed', error);
@@ -1407,7 +1407,7 @@ const handleSaveEndUp = async () => {
     } else {
       // If admin cleared all values locally, delete persisted rows for this table
       try {
-        await supabase.from('table_endups').delete().eq('table_id', table.id);
+        await supabase.from('end_ups').delete().eq('table_id', table.id);
       } catch (e) { /* ignore */ }
     }
 
