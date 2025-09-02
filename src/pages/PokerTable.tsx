@@ -241,7 +241,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
     if (!id) return null;
     try {
       // CHANGED: use RPC (SECURITY DEFINER) instead of direct select (RLS mismatch).
-      const { data, error } = await supabase.rpc('get_table_totals', { p_table_id: id });
+      const { data, error } = await (supabase as any).rpc('get_table_totals', { p_table_id: id });
       console.log('[PokerTable][fetchTotals][rpc] raw', {
         error,
         rows: data?.length,
@@ -325,8 +325,8 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
       for (let attempt = 0; attempt < 6; attempt++) {
         let tpRow = null;
         try {
-          const res = await retryQuery(() =>
-            supabase
+          const res = await retryQuery(async () =>
+            await supabase
               .from('table_players')
               .select('status, player_id')
               .eq('table_id', id)
@@ -334,15 +334,15 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
               .limit(1)            // ADDED: constrain result set to 1 row to avoid PGRST116
               .maybeSingle()       // now safe even if duplicates exist temporarily
           );
-          if (res && res.error) {
+          if (res && (res as any).error) {
             // preserve prior behavior: treat access-control as not-found
-            if (isAccessControlOrTransient(res.error)) {
+            if (isAccessControlOrTransient((res as any).error)) {
               tpRow = null;
             } else {
-              throw res.error;
+              throw (res as any).error;
             }
           } else {
-            tpRow = res.data;
+            tpRow = (res as any).data;
           }
         } catch (e) {
           if (isAccessControlOrTransient(e)) {
@@ -597,8 +597,8 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
     let mounted = true;
     const fetchPendingBuyIns = async () => {
       try {
-        const res = await retryQuery(() =>
-          supabase
+        const res = await retryQuery(async () =>
+          await supabase
             .from('buy_in_requests')
             .select('*')
             .eq('table_id', table.id)
@@ -1067,17 +1067,17 @@ const loadPlayersFromJoinTable = async (tableId: string, totals: Record<string, 
   console.log('[PokerTable][loadPlayersFromJoinTable] start', { tableId });
   if (!tableId) return;
   try {
-    const joinRes: any = await retryQuery(() =>
-      supabase.from('table_players').select('player_id,status').eq('table_id', tableId)
+    const joinRes: any = await retryQuery(async () =>
+      await supabase.from('table_players').select('player_id,status').eq('table_id', tableId)
     );
     const joinRows = joinRes.data || [];
-    const ids = Array.from(new Set(joinRows.map((r: any) => r.player_id).filter(Boolean)));
+    const ids = Array.from(new Set(joinRows.map((r: any) => r.player_id).filter(Boolean))) as string[];
     if (ids.length === 0) {
       setPlayers([]);
       console.log('[PokerTable][loadPlayersFromJoinTable] no players');
       return;
     }
-    const playersRes: any = await retryQuery(() => supabase.from('players').select('id,name').in('id', ids));
+    const playersRes: any = await retryQuery(async () => await supabase.from('players').select('id,name').in('id', ids));
     const playersData = playersRes.data || [];
     const statusById: Record<string, string> = {};
     joinRows.forEach((r: any) => { statusById[r.player_id] = r.status; });
@@ -1101,7 +1101,7 @@ const handleApprove = async (reqId: string) => {
   if (!reqId || processingRequests.includes(reqId) || !table) return;
   setProcessingRequests(prev => [...prev, reqId]);
   try {
-    const { data, error } = await supabase.rpc('approve_buy_in', { p_request_id: reqId });
+    const { data, error } = await (supabase as any).rpc('approve_buy_in', { p_request_id: reqId });
     if (error) {
       console.error('[PokerTable][handleApprove] RPC error', error);
       throw error;
