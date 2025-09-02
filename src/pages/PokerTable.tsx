@@ -11,16 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogHeader as HistoryDialogHeader, DialogTitle as HistoryDialogTitle, DialogFooter as HistoryDialogFooter, DialogTrigger as HistoryDialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Player, PokerTable as PokerTableType, TablePlayer } from '@/integrations/supabase/types';
-
-// Update types to match new schema
-type TablePlayer = {
-  id: string; // now references players.id
-  name: string;
-  totalPoints?: number;
-  active?: boolean;
-  pending?: boolean; // waiting for admin approval
-};
+import { Player, PokerTable as PokerTableType } from '@/integrations/supabase/types';
+import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
 
 type PokerTableRow = {
   admin_player_id?: string; // changed from admin_user_id
@@ -30,19 +22,14 @@ type PokerTableRow = {
   name?: string;
   status?: "active" | "ended";
   updated_at?: string;
-  players: TablePlayer[];
+  players: TablePlayerLocal[];
 };
 
 interface PokerTableProps {
-  table: PokerTableType & {
-    players: TablePlayer[];
-    adminName?: string;
-    joinCode?: number;
-    adminId?: string;
-  };
-  profile?: Player | null; // ADDED
-  refreshKey?: number; // ADD
-  onExit: () => void; // ADDED
+  table: EnhancedPokerTable;
+  profile?: Player | null;
+  refreshKey?: number;
+  onExit: () => void;
 }
 
 const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => {
@@ -52,7 +39,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
   const isAdmin = !!profile && !!normalizedAdminId && profile.id === normalizedAdminId;
 
   // Add new state to hold players loaded from table_players + players table
-  const [players, setPlayers] = useState<TablePlayer[]>(table?.players || []);
+  const [players, setPlayers] = useState<TablePlayerLocal[]>(table?.players || []);
 
   // NEW: Determine if the current user is a player on the table
   const isPlayerOnTable = useMemo(() => {
@@ -284,21 +271,23 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
       }
 
       const totals: Record<string, number> = {};
-      (data || []).forEach((r: any, idx: number) => {
-        if (!r.player_id) {
-          console.warn('[PokerTable][fetchTotals][rpc] null player_id row skipped', r);
-          return;
-        }
-        const before = totals[r.player_id] || 0;
-        totals[r.player_id] = before + Number(r.total_amount);
-        console.log('[PokerTable][fetchTotals][rpc] accumulate', {
-          idx,
-          player_id: r.player_id,
-          total_amount: r.total_amount,
-          before,
-          after: totals[r.player_id]
+      if (Array.isArray(data)) {
+        data.forEach((r: any, idx: number) => {
+          if (!r.player_id) {
+            console.warn('[PokerTable][fetchTotals][rpc] null player_id row skipped', r);
+            return;
+          }
+          const before = totals[r.player_id] || 0;
+          totals[r.player_id] = before + Number(r.total_amount);
+          console.log('[PokerTable][fetchTotals][rpc] accumulate', {
+            idx,
+            player_id: r.player_id,
+            total_amount: r.total_amount,
+            before,
+            after: totals[r.player_id]
+          });
         });
-      });
+      }
 
       // Diagnostics (unchanged logic conceptually)
       const playerIds = players.map(p => p.id);
@@ -345,15 +334,15 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
               .limit(1)            // ADDED: constrain result set to 1 row to avoid PGRST116
               .maybeSingle()       // now safe even if duplicates exist temporarily
           );
-          if (res && (res as any).error) {
+          if (res && res.error) {
             // preserve prior behavior: treat access-control as not-found
-            if (isAccessControlOrTransient((res as any).error)) {
+            if (isAccessControlOrTransient(res.error)) {
               tpRow = null;
             } else {
-              throw (res as any).error;
+              throw res.error;
             }
           } else {
-            tpRow = (res as any).data;
+            tpRow = res.data;
           }
         } catch (e) {
           if (isAccessControlOrTransient(e)) {
@@ -1092,7 +1081,7 @@ const loadPlayersFromJoinTable = async (tableId: string, totals: Record<string, 
     const playersData = playersRes.data || [];
     const statusById: Record<string, string> = {};
     joinRows.forEach((r: any) => { statusById[r.player_id] = r.status; });
-    const nextPlayers: TablePlayer[] = playersData.map((p: any) => ({
+    const nextPlayers: TablePlayerLocal[] = playersData.map((p: any) => ({
       id: p.id,
       name: p.name,
       totalPoints: totals[p.id] ?? 0,
@@ -1374,8 +1363,8 @@ const fetchEndUpValues = async (tableId?: string) => {
   if (!id) return;
   try {
     const { data, error } = await supabase
-      .from('end_ups')
-      .select('player_id, value')
+      .from('table_endups')
+      .select('player_id, endup')
       .eq('table_id', id);
     if (error) {
       console.warn('[PokerTable][fetchEndUpValues] failed', error);
@@ -1384,7 +1373,7 @@ const fetchEndUpValues = async (tableId?: string) => {
     const map: Record<string, number> = {};
     (data || []).forEach((r: any) => {
       if (!r || !r.player_id) return;
-      map[r.player_id] = Number(r.value || 0);
+      map[r.player_id] = Number(r.endup || 0);
     });
     setEndUpValues(map);
     console.log('[PokerTable][fetchEndUpValues] loaded', { tableId: id, count: Object.keys(map).length });
@@ -1401,14 +1390,14 @@ const handleSaveEndUp = async () => {
     const rows = Object.keys(endUpValues).map(pid => ({
       table_id: table.id,
       player_id: pid,
-      value: Number(endUpValues[pid] ?? 0),
+      endup: Number(endUpValues[pid] ?? 0),
       updated_at: new Date().toISOString()
     }));
 
     if (rows.length > 0) {
       // Upsert using composite unique on (table_id, player_id)
       const { error } = await supabase
-        .from('end_ups')
+        .from('table_endups')
         .upsert(rows, { onConflict: 'table_id,player_id' });
       if (error) {
         console.error('[PokerTable] handleSaveEndUp upsert failed', error);
@@ -1418,7 +1407,7 @@ const handleSaveEndUp = async () => {
     } else {
       // If admin cleared all values locally, delete persisted rows for this table
       try {
-        await supabase.from('end_ups').delete().eq('table_id', table.id);
+        await supabase.from('table_endups').delete().eq('table_id', table.id);
       } catch (e) { /* ignore */ }
     }
 

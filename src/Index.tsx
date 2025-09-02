@@ -32,16 +32,26 @@ if (typeof window !== "undefined") {
   });
 }
 
+import { StoragePokerTable, EnhancedPokerTable } from '@/types/table';
+
 const IndexPage = () => {
   const [profile, setProfile] = useState<any>(() => {
     const p = storage.getProfile();
     console.log('[Index.init] profile from storage:', p);
     return p;
   });
-  const [table, setTable] = useState<any>(() => {
+  const [table, setTable] = useState<StoragePokerTable | null>(() => {
     const t = storage.getTable();
-    console.log('[Index.init] table from storage:', t);
-    return t;
+    if (!t) return null;
+    return {
+      ...t,
+      players: (t as any).players || [],
+      admin_player_id: t.admin_player_id || '',
+      join_code: t.join_code || 0,
+      created_at: t.created_at || '',
+      updated_at: t.updated_at || '',
+      name: t.name || 'Unnamed Table'
+    };
   });
   const [hydrating, setHydrating] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -137,12 +147,16 @@ const IndexPage = () => {
             .eq('id', urlTableId)
             .maybeSingle();
           if (!cancelled && data && !error) {
-            const hydratedTable = {
+            const hydratedTable: StoragePokerTable = {
               id: data.id,
-              name: data.name,
+              name: data.name || 'Unnamed Table',
               status: data.status,
               joinCode: data.join_code,
               adminId: data.admin_player_id,
+              admin_player_id: data.admin_player_id,
+              join_code: data.join_code,
+              created_at: data.created_at,
+              updated_at: data.updated_at,
               players: [] // defer players; PokerTable will refresh
             };
             setTable(hydratedTable);
@@ -180,8 +194,17 @@ const IndexPage = () => {
     if (table) return;
     const stored = storage.getTable();
     if (!stored) return;
+    const normalizedStored: StoragePokerTable = {
+      ...stored,
+      players: (stored as any).players || [],
+      admin_player_id: stored.admin_player_id || '',
+      join_code: stored.join_code || 0,
+      created_at: stored.created_at || '',
+      updated_at: stored.updated_at || '',
+      name: stored.name || 'Unnamed Table'
+    };
     console.log('[Index.fallback] table state null but storage has table -> restoring');
-    setTable(stored);
+    setTable(normalizedStored);
     setRefreshKey(k => k + 1);
   }, [hydrating, table]);
 
@@ -279,7 +302,18 @@ const IndexPage = () => {
               .single();
             
             if (data && !error) {
-              const normalized = normalizeSelectedTable(data, profile);
+              const normalized: StoragePokerTable = {
+                id: data.id,
+                name: data.name || 'Unnamed Table',
+                status: data.status,
+                joinCode: data.join_code,
+                adminId: data.admin_player_id,
+                players: [],
+                admin_player_id: data.admin_player_id,
+                join_code: data.join_code,
+                created_at: data.created_at,
+                updated_at: data.updated_at
+              };
               setTable(normalized);
               storage.setTable(normalized);
               setWaitingForApproval(false);
@@ -382,6 +416,11 @@ const IndexPage = () => {
     );
   }
 
+  const handleSwitchPlayer = () => {
+    setProfile(null);
+    storage.setProfile(null);
+  };
+
   // keep decide log AFTER onboarding guard
   console.log('[Index.render] decide', { tableId: table?.id || null });
 
@@ -389,7 +428,10 @@ const IndexPage = () => {
     <>
       {table ? (
         <PokerTable
-          table={table}
+          table={{
+            ...table,
+            players: table.players || []
+          } as EnhancedPokerTable}
           profile={profile}
           refreshKey={refreshKey}
           onExit={() => {
@@ -408,11 +450,18 @@ const IndexPage = () => {
             if (selectingRef.current) return;
             selectingRef.current = true;
             
-            const normalized = normalizeSelectedTable(raw, profile);
-            if (!normalized) {
-              selectingRef.current = false;
-              return;
-            }
+            const normalized: StoragePokerTable = {
+              id: raw.id,
+              name: raw.name || 'Unnamed Table',
+              status: raw.status,
+              joinCode: raw.joinCode,
+              adminId: raw.adminId,
+              admin_player_id: raw.admin_player_id || raw.adminId || '',
+              join_code: raw.join_code || raw.joinCode || 0,
+              created_at: raw.created_at || new Date().toISOString(),
+              updated_at: raw.updated_at || new Date().toISOString(),
+              players: raw.players || []
+            };
 
             setTable(normalized);
             storage.setTable(normalized);
@@ -433,6 +482,7 @@ const IndexPage = () => {
             toast('Request sent!', { description: 'Waiting for the admin to approve your request.' });
           }}
           waitingApproval={waitingForApproval ?? false}
+          onSwitchPlayer={handleSwitchPlayer}
         />
       )}
       {/* Add Install App button if install prompt is available */}

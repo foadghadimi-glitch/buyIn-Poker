@@ -10,6 +10,7 @@ import TableSelection from "./pages/TableSelection";
 import PokerTable from "./pages/PokerTable";
 import { storage } from "./utils/storage";
 import { Player, PokerTable as PokerTableType } from "./integrations/supabase/types";
+import { StoragePokerTable, EnhancedPokerTable } from '@/types/table';
 import { supabase } from "./integrations/supabase/client";
 
 const queryClient = new QueryClient();
@@ -90,14 +91,17 @@ const App = () => {
         />
       );
     }
-    return (
-      <PokerTable
-        table={table}
-        profile={profile}
-        onExit={handleExitTable}
-        refreshKey={refreshKey}
-      />
-    );
+      return (
+        <PokerTable
+          table={{
+            ...table,
+            players: []
+          } as EnhancedPokerTable}
+          profile={profile}
+          onExit={handleExitTable}
+          refreshKey={refreshKey}
+        />
+      );
   };
 
   return (

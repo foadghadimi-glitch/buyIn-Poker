@@ -5,11 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { storage } from '@/utils/storage';
 import { supabase } from '@/integrations/supabase/client';
-import type { Table as PokerTable } from '@/types';
+import type { PokerTable } from '@/integrations/supabase/types';
 
 const History = () => {
   const navigate = useNavigate();
-  const [table] = useState<PokerTable | null>(storage.getTable());
+  const [table] = useState<any>(storage.getTable());
   const [buyInHistory, setBuyInHistory] = useState<Array<{
     id: string;
     playerName: string;
