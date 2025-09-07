@@ -1451,38 +1451,42 @@ useEffect(() => {
 
 return (
     <div
-      className="min-h-screen flex items-start justify-center pt-4 pb-4 px-2 sm:px-4 bg-cover"
+      className="min-h-screen flex items-start justify-center pt-2 pb-2 px-2 sm:px-4"
       style={{
         backgroundImage: "url('/Poker_06.png')",
         backgroundPosition: 'center 85%',
+        backgroundSize: 'cover',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+        willChange: 'auto'
       }}
     >
-      <Card className="w-full max-w-2xl min-h-[85vh] bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
-        <CardHeader className="p-4">
-          <CardTitle className="text-white text-lg">
+      <Card className="w-full max-w-2xl min-h-[70vh] bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
+        <CardHeader className="p-3">
+          <CardTitle className="text-white text-base">
             Poker Table: {table.name || normalizedJoinCode}
           </CardTitle>
-          <CardDescription className="text-gray-300 text-sm leading-tight">
+          <CardDescription className="text-gray-300 text-xs leading-tight">
             Join Code: <span className="font-bold text-yellow-300">{normalizedJoinCode}</span> <br />
             Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 flex-1">
+        <CardContent className="p-3 flex-1">
           {/* ADDED: Show "Request to Join" button if not a player and not pending */}
           {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
-            <div className="mb-4 p-3 border rounded-lg bg-black/50 border-blue-400/50">
-              <h3 className="font-semibold text-base mb-2 text-white">You are viewing this table as a spectator.</h3>
+            <div className="mb-3 p-2 border rounded-lg bg-black/50 border-blue-400/50">
+              <h3 className="font-semibold text-sm mb-1 text-white">You are viewing this table as a spectator.</h3>
               {/* If profile is missing, explain cause & recovery */}
               {!profile && (
-                <p className="text-xs text-yellow-300 mb-2">
+                <p className="text-xs text-yellow-300 mb-1">
                   Your local profile or table selection is missing. This happens if you cleared browser storage/cache or restarted the device — it removes only the local identity and selection. Server data (tables, players, join requests, buy-ins, end-up values) is still intact.
                   To recover: open Onboarding to recreate your profile, then request to join this table or ask the admin to re-add your player row.
                 </p>
               )}
-              <p className="text-xs text-gray-300 mb-3">To participate, request to join. The admin will need to approve your request.</p>
+              <p className="text-xs text-gray-300 mb-2">To participate, request to join. The admin will need to approve your request.</p>
               <Button
                 onClick={handleRequestJoin}
-                className="w-full"
+                className="w-full h-8"
                 variant="hero"
                 disabled={processingJoinRequestLocal || pendingJoinPlayerIds.has(profile?.id || '')}
               >
@@ -1495,22 +1499,22 @@ return (
           {isPlayerOnTable && (
             <>
               {/* Buy-in request section */}
-              <div className="mb-3">
+              <div className="mb-2">
                 {/* Primary Action Buttons Row */}
-                <div className="grid grid-cols-2 gap-3 mb-2">
+                <div className="grid grid-cols-2 gap-2 mb-2">
                   {/* Buy-in button */}
                   <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                     <DialogTrigger asChild>
                       <Button
                         variant="hero"
-                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-emerald-500/90 to-green-600/90 hover:from-emerald-400/90 hover:to-green-500/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-emerald-400/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
+                        className="group relative w-full h-8 text-xs font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-emerald-500/90 to-green-600/90 hover:from-emerald-400/90 hover:to-green-500/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-emerald-400/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="buy-in" className="text-lg drop-shadow-sm">💸</span>
+                        <span role="img" aria-label="buy-in" className="text-sm drop-shadow-sm">💸</span>
                         <span className="drop-shadow-sm">Buy-in Request</span>
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-xs w-80">
                       <DialogHeader>
                         <DialogTitle>Request Buy-in</DialogTitle>
                       </DialogHeader>
@@ -1550,16 +1554,16 @@ return (
                     <HistoryDialogTrigger asChild>
                       <Button
                         variant="outline"
-                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-slate-700/90 to-slate-800/90 hover:from-slate-600/90 hover:to-slate-700/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-slate-500/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
+                        className="group relative w-full h-8 text-xs font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-slate-700/90 to-slate-800/90 hover:from-slate-600/90 hover:to-slate-700/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-slate-500/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="history" className="text-lg drop-shadow-sm">📜</span>
+                        <span role="img" aria-label="history" className="text-sm drop-shadow-sm">📜</span>
                         <span className="drop-shadow-sm">History</span>
                       </Button>
                     </HistoryDialogTrigger>
                     <HistoryDialogContent
-                      className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
-                      style={{ minWidth: 350, maxWidth: 600 }}
+                      className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-md"
+                      style={{ width: '400px', maxWidth: '90vw' }}
                     >
                       <HistoryDialogHeader>
                         <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
@@ -1623,7 +1627,7 @@ return (
                 </div>
 
                 {/* Secondary Action Buttons Row */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1">
                   {/* End Up button */}
                   {(() => {
                     // show End Up button to everyone (admin edits, regular users read-only)
@@ -1652,7 +1656,9 @@ return (
                           maxWidth: '90vw',
                           padding: '16px',
                           minHeight: '500px',
-                          maxHeight: '90vh'
+                          maxHeight: '90vh',
+                          touchAction: 'manipulation',
+                          userSelect: 'none'
                         }}
                       >
                         <DialogHeader>
@@ -1665,10 +1671,11 @@ return (
                             maxHeight: '70vh',
                             overflowX: 'auto',
                             overflowY: 'auto',
-                            padding: '0'
+                            padding: '0',
+                            touchAction: 'manipulation'
                           }}
                         >
-                          <UITable style={{ width: 'auto', height: '100%' }}>
+                          <UITable style={{ width: 'auto', height: '100%', touchAction: 'manipulation' }}>
                             <TableHeader>
                               <TableRow className="border-b-white/20">
                                 <TableHead className="text-white" style={{
@@ -1745,13 +1752,22 @@ return (
                                         style={{
                                           width: 78,
                                           height: 26,
-                                          fontSize: '11px',
+                                          fontSize: '16px',
                                           padding: '4px 6px',
                                           textAlign: 'center',
-                                          lineHeight: '18px'
+                                          lineHeight: '18px',
+                                          touchAction: 'manipulation',
+                                          transform: 'scale(1)',
+                                          transformOrigin: 'center'
                                         }}
                                         value={endUp}
                                         onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
+                                        onFocus={(e) => {
+                                          e.target.style.fontSize = '16px';
+                                          e.target.addEventListener('blur', () => {
+                                            e.target.style.fontSize = '16px';
+                                          });
+                                        }}
                                       />
                                     </TableCell>
                                     <TableCell style={{
@@ -1852,7 +1868,7 @@ return (
                         <span className="drop-shadow-sm">Exit Table</span>
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-xs w-80">
                       <DialogHeader>
                         <DialogTitle>Exit Game</DialogTitle>
                       </DialogHeader>
@@ -1885,15 +1901,15 @@ return (
               </div>
               {/* Admin notification and approval UI */}
               {isAdmin && pendingRequests.length > 0 && (
-                <Card className="mb-4 bg-gray-900/80 border-gray-700">
-                  <CardHeader className="p-3">
-                    <CardTitle className="text-white text-base">Pending Buy-in Requests</CardTitle>
-                    <CardDescription className="text-gray-400 text-sm">Approve or reject buy-in requests below.</CardDescription>
+                <Card className="mb-3 bg-gray-900/80 border-gray-700">
+                  <CardHeader className="p-2">
+                    <CardTitle className="text-white text-sm">Pending Buy-in Requests</CardTitle>
+                    <CardDescription className="text-gray-400 text-xs">Approve or reject buy-in requests below.</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-3">
-                    <div className="space-y-3">
+                  <CardContent className="p-2">
+                    <div className="space-y-2">
                       {pendingRequests.map((r) => (
-                        <div key={r.id} className="flex items-center justify-between rounded-md border p-3 border-gray-700">
+                        <div key={r.id} className="flex items-center justify-between rounded-md border p-2 border-gray-700">
                           <div>
                             <div className="font-medium text-white">
                               {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
@@ -1928,19 +1944,19 @@ return (
               )}
               {/* Admin notification and approval UI for join requests */}
               {isAdmin && pendingJoinRequests.length > 0 && (
-                <Card className="mb-4 bg-gray-900/80 border-gray-700">
-                  <CardHeader className="p-3">
-                    <CardTitle className="text-white text-base">Pending Join Requests</CardTitle>
-                    <CardDescription className="text-gray-400 text-sm">Approve or reject player join requests below.</CardDescription>
+                <Card className="mb-3 bg-gray-900/80 border-gray-700">
+                  <CardHeader className="p-2">
+                    <CardTitle className="text-white text-sm">Pending Join Requests</CardTitle>
+                    <CardDescription className="text-gray-400 text-xs">Approve or reject player join requests below.</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-3">
-                    <div className="space-y-3">
+                  <CardContent className="p-2">
+                    <div className="space-y-2">
                       {pendingJoinRequests.map((r) => {
                         // Show only player name, hide player ID
                         const playerObj = players.find((p: any) => p.id === r.player_id);
                         const displayName = playerObj?.name || r.player_name || '';
                         return (
-                          <div key={r.id} className="flex items-center justify-between rounded-md border p-3 border-gray-700">
+                          <div key={r.id} className="flex items-center justify-between rounded-md border p-2 border-gray-700">
                             <div>
                               <div className="font-medium text-white">
                                 {displayName}
@@ -1976,16 +1992,13 @@ return (
               )}
               {/* Player totals table */}
               <Card className="mb-2 bg-gray-900/50 border-gray-700">
-                <CardHeader className="p-2">
-                  <CardTitle className="text-white text-sm">Total Buy-ins</CardTitle>
-                  <CardDescription className="text-gray-400 text-xs">
-                    Your total approved buy-ins for this table.
-                  </CardDescription>
+                <CardHeader className="p-1">
+                  <CardTitle className="text-white text-xs">Total Buy-ins</CardTitle>
                 </CardHeader>
                 <CardContent className="p-2 pt-0">
                   {/* Show player name and total buy-ins with centered total */}
                   <div className="flex items-center">
-                    <div className="text-sm text-gray-200 flex-shrink-0">
+                    <div className="text-xs text-gray-200 flex-shrink-0">
                       {profile?.name}
                     </div>
                     <div className="flex-1 flex justify-center">
@@ -1999,7 +2012,7 @@ return (
             </>
           )}
 
-          <div className="mt-3" style={{ maxHeight: '450px', overflowY: 'auto' }}>
+          <div className="mt-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
             <UITable>
               <TableHeader>
                 <TableRow className="border-b-green-400/30">
@@ -2025,7 +2038,7 @@ return (
                           <span style={{ color: '#ef4444', marginLeft: 4, fontSize: 10 }}>(Exited)</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-white py-0.5 px-2 text-xs">
+                      <TableCell className="text-right font-mono text-white py-0.5 px-2 text-base font-bold">
                         {parseInt(String(playerTotals[p.id] ?? 0), 10)}
                       </TableCell>
                     </TableRow>
@@ -2039,7 +2052,7 @@ return (
 
       {/* Edit Profile dialog (always rendered, controlled by openEditProfile state) */}
       <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
-        <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+        <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-xs w-80">
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
