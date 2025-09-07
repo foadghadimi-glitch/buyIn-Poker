@@ -1824,6 +1824,48 @@ return (
                   <span role="img" aria-label="edit">✏️</span>
                   Edit Profile
                 </Button>
+
+                {/* Exit Game button - moved from bottom to button group */}
+                <Dialog open={openExit} onOpenChange={setOpenExit}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-red-600 hover:bg-red-700 text-white border-none flex items-center gap-1 transition-all"
+                      disabled={processingExit}
+                    >
+                      <span role="img" aria-label="exit">🚪</span>
+                      Exit Table
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+                    <DialogHeader>
+                      <DialogTitle>Exit Game</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-2 text-sm">
+                      <p>You will be moved to the table selection page.</p>
+                      <p className="text-gray-300 text-sm">Click Yes to continue.</p>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setOpenExit(false)}
+                        disabled={processingExit}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={async () => {
+                          setOpenExit(false);
+                          await handleExitGame();
+                        }}
+                        disabled={processingExit}
+                      >
+                        Yes, Exit Table
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
               {/* Admin notification and approval UI */}
               {isAdmin && pendingRequests.length > 0 && (
@@ -1974,49 +2016,6 @@ return (
               </TableBody>
             </UITable>
           </div>
-
-          {/* Exit Game button (always visible) */}
-         
-          <Dialog open={openExit} onOpenChange={setOpenExit}>
-            <DialogTrigger asChild>
-              <Button
-                variant="outline"
-                className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-red-600 hover:bg-red-700 text-white border-none flex items-center gap-1 transition-all"
-                disabled={processingExit}
-              >
-                <span role="img" aria-label="exit">🚪</span>
-                Back to Table Selection
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
-              <DialogHeader>
-                <DialogTitle>Exit Game</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2 text-sm">
-                <p>You will be moved to the table selection page.</p>
-                <p className="text-gray-300 text-sm">Click Yes to continue.</p>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="secondary"
-                  onClick={() => setOpenExit(false)}
-                  disabled={processingExit}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    setOpenExit(false);
-                    await handleExitGame();
-                  }}
-                  disabled={processingExit}
-                >
-                  Yes, Exit Table
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </CardContent>
       </Card>
 
