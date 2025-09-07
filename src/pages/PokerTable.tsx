@@ -1462,31 +1462,33 @@ return (
       }}
     >
       <Card className="w-full max-w-2xl min-h-[70vh] bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
-        <CardHeader className="p-3">
-          <CardTitle className="text-white text-base">
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-white text-lg font-bold">
             Poker Table: {table.name || normalizedJoinCode}
           </CardTitle>
-          <CardDescription className="text-gray-300 text-xs leading-tight">
-            Join Code: <span className="font-bold text-yellow-300">{normalizedJoinCode}</span> <br />
-            Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
-          </CardDescription>
+          <div className="text-gray-300 text-sm leading-relaxed mt-2">
+            <div className="flex flex-col gap-1">
+              <div>Join Code: <span className="font-bold text-yellow-300 text-base">{normalizedJoinCode}</span></div>
+              <div>Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span></div>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="p-3 flex-1">
+        <CardContent className="p-4 pt-0 flex-1">
           {/* ADDED: Show "Request to Join" button if not a player and not pending */}
           {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
-            <div className="mb-3 p-2 border rounded-lg bg-black/50 border-blue-400/50">
-              <h3 className="font-semibold text-sm mb-1 text-white">You are viewing this table as a spectator.</h3>
+            <div className="mb-4 p-3 border rounded-lg bg-black/50 border-blue-400/50">
+              <h3 className="font-semibold text-sm mb-2 text-white">You are viewing this table as a spectator.</h3>
               {/* If profile is missing, explain cause & recovery */}
               {!profile && (
-                <p className="text-xs text-yellow-300 mb-1">
+                <p className="text-xs text-yellow-300 mb-2">
                   Your local profile or table selection is missing. This happens if you cleared browser storage/cache or restarted the device — it removes only the local identity and selection. Server data (tables, players, join requests, buy-ins, end-up values) is still intact.
                   To recover: open Onboarding to recreate your profile, then request to join this table or ask the admin to re-add your player row.
                 </p>
               )}
-              <p className="text-xs text-gray-300 mb-2">To participate, request to join. The admin will need to approve your request.</p>
+              <p className="text-xs text-gray-300 mb-3">To participate, request to join. The admin will need to approve your request.</p>
               <Button
                 onClick={handleRequestJoin}
-                className="w-full h-8"
+                className="w-full h-9"
                 variant="hero"
                 disabled={processingJoinRequestLocal || pendingJoinPlayerIds.has(profile?.id || '')}
               >
@@ -1499,18 +1501,18 @@ return (
           {isPlayerOnTable && (
             <>
               {/* Buy-in request section */}
-              <div className="mb-2">
+              <div className="mb-4">
                 {/* Primary Action Buttons Row */}
-                <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="grid grid-cols-2 gap-3 mb-3">
                   {/* Buy-in button */}
                   <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                     <DialogTrigger asChild>
                       <Button
                         variant="hero"
-                        className="group relative w-full h-8 text-xs font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-emerald-500/90 to-green-600/90 hover:from-emerald-400/90 hover:to-green-500/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-emerald-400/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
+                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-emerald-500/90 to-green-600/90 hover:from-emerald-400/90 hover:to-green-500/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-emerald-400/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="buy-in" className="text-sm drop-shadow-sm">💸</span>
+                        <span role="img" aria-label="buy-in" className="text-base drop-shadow-sm mr-2">💸</span>
                         <span className="drop-shadow-sm">Buy-in Request</span>
                       </Button>
                     </DialogTrigger>
@@ -1554,10 +1556,10 @@ return (
                     <HistoryDialogTrigger asChild>
                       <Button
                         variant="outline"
-                        className="group relative w-full h-8 text-xs font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-slate-700/90 to-slate-800/90 hover:from-slate-600/90 hover:to-slate-700/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-slate-500/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
+                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-slate-700/90 to-slate-800/90 hover:from-slate-600/90 hover:to-slate-700/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-slate-500/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="history" className="text-sm drop-shadow-sm">📜</span>
+                        <span role="img" aria-label="history" className="text-base drop-shadow-sm mr-2">📜</span>
                         <span className="drop-shadow-sm">History</span>
                       </Button>
                     </HistoryDialogTrigger>
@@ -1627,7 +1629,7 @@ return (
                 </div>
 
                 {/* Secondary Action Buttons Row */}
-                <div className="grid grid-cols-3 gap-1">
+                <div className="grid grid-cols-3 gap-2">
                   {/* End Up button */}
                   {(() => {
                     // show End Up button to everyone (admin edits, regular users read-only)
@@ -1642,10 +1644,10 @@ return (
                       <DialogTrigger asChild>
                         <Button
                           variant="outline"
-                          className="group relative w-full h-8 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-amber-600/80 to-yellow-700/80 hover:from-amber-500/80 hover:to-yellow-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-amber-400/20 transition-all duration-300 transform hover:scale-[1.02]"
+                          className="group relative w-full h-9 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-amber-600/80 to-yellow-700/80 hover:from-amber-500/80 hover:to-yellow-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-amber-400/20 transition-all duration-300 transform hover:scale-[1.02]"
                         >
                           <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                          <span role="img" aria-label="end-up" className="text-xs drop-shadow-sm">🏁</span>
+                          <span role="img" aria-label="end-up" className="text-sm drop-shadow-sm mr-1">🏁</span>
                           <span className="drop-shadow-sm">End Up</span>
                         </Button>
                       </DialogTrigger>
@@ -1775,7 +1777,7 @@ return (
                                       textAlign: 'center',
                                       fontSize: '11px',
                                       height: 28,
-                                      verticalAlign: 'middle',
+                                                                           verticalAlign: 'middle',
                                       minWidth: '75px'
                                     }}>
                                       {profitDiv7}
@@ -1843,7 +1845,7 @@ return (
                   {/* Edit Profile button */}
                   <Button
                     variant="outline"
-                    className="group relative w-full h-8 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-blue-600/80 to-indigo-700/80 hover:from-blue-500/80 hover:to-indigo-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-blue-400/20 transition-all duration-300 transform hover:scale-[1.02]"
+                    className="group relative w-full h-9 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-blue-600/80 to-indigo-700/80 hover:from-blue-500/80 hover:to-indigo-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-blue-400/20 transition-all duration-300 transform hover:scale-[1.02]"
                     onClick={() => {
                       setEditName(profile?.name || '');
                       setEditError('');
@@ -1851,7 +1853,7 @@ return (
                     }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    <span role="img" aria-label="edit" className="text-xs drop-shadow-sm">✏️</span>
+                    <span role="img" aria-label="edit" className="text-sm drop-shadow-sm mr-1">✏️</span>
                     <span className="drop-shadow-sm">Edit Profile</span>
                   </Button>
 
@@ -1860,11 +1862,11 @@ return (
                     <DialogTrigger asChild>
                       <Button
                         variant="outline"
-                        className="group relative w-full h-8 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-rose-600/80 to-red-700/80 hover:from-rose-500/80 hover:to-red-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-rose-400/20 transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 disabled:opacity-50"
+                        className="group relative w-full h-9 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-rose-600/80 to-red-700/80 hover:from-rose-500/80 hover:to-red-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-rose-400/20 transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 disabled:opacity-50"
                         disabled={processingExit}
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="exit" className="text-xs drop-shadow-sm">🚪</span>
+                        <span role="img" aria-label="exit" className="text-sm drop-shadow-sm mr-1">🚪</span>
                         <span className="drop-shadow-sm">Exit Table</span>
                       </Button>
                     </DialogTrigger>
@@ -1991,20 +1993,18 @@ return (
                 </Card>
               )}
               {/* Player totals table */}
-              <Card className="mb-2 bg-gray-900/50 border-gray-700">
-                <CardHeader className="p-1">
-                  <CardTitle className="text-white text-xs">Total Buy-ins</CardTitle>
+              <Card className="mb-3 bg-gray-900/50 border-gray-700 rounded-lg">
+                <CardHeader className="p-3 pb-2">
+                  <CardTitle className="text-white text-sm font-semibold">Your Total Buy-ins</CardTitle>
                 </CardHeader>
-                <CardContent className="p-2 pt-0">
+                <CardContent className="p-3 pt-0">
                   {/* Show player name and total buy-ins with centered total */}
-                  <div className="flex items-center">
-                    <div className="text-xs text-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-200 font-medium">
                       {profile?.name}
                     </div>
-                    <div className="flex-1 flex justify-center">
-                      <div className="text-3xl font-bold text-white">
-                        {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
-                      </div>
+                    <div className="text-4xl font-bold text-green-400">
+                      {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
                     </div>
                   </div>
                 </CardContent>
@@ -2012,40 +2012,45 @@ return (
             </>
           )}
 
-          <div className="mt-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            <UITable>
-              <TableHeader>
-                <TableRow className="border-b-green-400/30">
-                  <TableHead className="text-white py-1 px-2 text-xs">Player</TableHead>
-                  <TableHead className="text-right text-white py-1 px-2 text-xs">Total Buy-ins</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {/* Always show all players, regardless of active status.
-                  - Dim only real 'inactive' players (status === 'inactive').
-                  - Show '(Pending)' for players waiting admin approval (do not show red 'Exited'). */}
-                {players.map((p: any) => {
-                  const isPending = !!p.pending;
-                  const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
-                  return (
-                    <TableRow key={p.id} className={`border-b-green-400/20 ${isInactive ? 'opacity-50' : ''} h-6`}>
-                      <TableCell className="font-medium text-white py-0.5 px-2 text-xs">
-                        {p.name}
-                        {isPending && (
-                          <span style={{ color: '#fcd34d', marginLeft: 4, fontSize: 10 }}>(Pending)</span>
-                        )}
-                        {isInactive && (
-                          <span style={{ color: '#ef4444', marginLeft: 4, fontSize: 10 }}>(Exited)</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-white py-0.5 px-2 text-base font-bold">
-                        {parseInt(String(playerTotals[p.id] ?? 0), 10)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </UITable>
+          <div className="mt-3" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+            <div className="bg-gray-900/30 rounded-lg border border-gray-700">
+              <div className="p-3 border-b border-gray-700">
+                <h3 className="text-white text-sm font-semibold">All Players</h3>
+              </div>
+              <UITable>
+                <TableHeader>
+                  <TableRow className="border-b-green-400/30">
+                    <TableHead className="text-white py-2 px-3 text-sm font-medium">Player</TableHead>
+                    <TableHead className="text-right text-white py-2 px-3 text-sm font-medium">Total Buy-ins</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {/* Always show all players, regardless of active status.
+                    - Dim only real 'inactive' players (status === 'inactive').
+                    - Show '(Pending)' for players waiting admin approval (do not show red 'Exited'). */}
+                  {players.map((p: any) => {
+                    const isPending = !!p.pending;
+                    const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
+                    return (
+                      <TableRow key={p.id} className={`border-b-green-400/20 ${isInactive ? 'opacity-50' : ''} h-8`}>
+                        <TableCell className="font-medium text-white py-1.5 px-3 text-sm">
+                          {p.name}
+                          {isPending && (
+                            <span className="ml-2 text-xs text-yellow-400 bg-yellow-400/20 px-2 py-0.5 rounded-full">(Pending)</span>
+                          )}
+                          {isInactive && (
+                            <span className="ml-2 text-xs text-red-400 bg-red-400/20 px-2 py-0.5 rounded-full">(Exited)</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-white py-1.5 px-3 text-lg font-bold">
+                          {parseInt(String(playerTotals[p.id] ?? 0), 10)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </UITable>
+            </div>
           </div>
         </CardContent>
       </Card>
