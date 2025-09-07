@@ -13,6 +13,7 @@ import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogH
 import { toast } from 'sonner';
 import { Player, PokerTable as PokerTableType } from '@/integrations/supabase/types';
 import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
+import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy } from 'lucide-react';
 
 type PokerTableRow = {
   admin_player_id?: string; // changed from admin_user_id
@@ -30,9 +31,10 @@ interface PokerTableProps {
   profile?: Player | null;
   refreshKey?: number;
   onExit: () => void;
+  showBackground?: boolean; // NEW: optional background toggle
 }
 
-const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => {
+const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true }: PokerTableProps) => {
   // NORMALIZE admin id & join code (covers snake_case / camelCase)
   const normalizedAdminId = table.adminId || table.admin_player_id;
   const normalizedJoinCode = table.joinCode ?? (table as any).join_code;
@@ -119,6 +121,14 @@ const PokerTable = ({ table, profile, refreshKey, onExit }: PokerTableProps) => 
   const processingBuyInRef = useRef(false);
   const processingJoinRef = useRef(false);
   const [adminName, setAdminName] = useState<string>('');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyJoinCode = () => {
+    if (!normalizedJoinCode) return;
+    navigator.clipboard.writeText(normalizedJoinCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   const handleEndUpChange = (playerId: string, value: number) => {
     setEndUpValues(prev => ({ ...prev, [playerId]: value }));
@@ -1449,652 +1459,903 @@ useEffect(() => {
   return () => { supabase.removeChannel(ch); };
 }, [table?.id]);
 
+const [openPlayerModal, setOpenPlayerModal] = useState(false);
+const [playerSearch, setPlayerSearch] = useState('');
+
+// Helper to get sorted players (by total buy-ins desc)
+const getSortedPlayers = () => {
+  return [...players].sort((a, b) => {
+    const aTotal = playerTotals[a.id] ?? 0;
+    const bTotal = playerTotals[b.id] ?? 0;
+    return bTotal - aTotal;
+  });
+};
+
+// Helper to filter players by search
+const getFilteredPlayers = (playersList: any[]) => {
+  if (!playerSearch.trim()) return playersList;
+  return playersList.filter(p => 
+    p.name.toLowerCase().includes(playerSearch.toLowerCase())
+  );
+};
+
 return (
-    <div
-      className="min-h-screen flex items-start justify-center pt-2 pb-2 px-2 sm:px-4"
-      style={{
-        backgroundImage: "url('/Poker_06.png')",
-        backgroundPosition: 'center 85%',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed',
-        willChange: 'auto'
-      }}
-    >
-      <Card className="w-full max-w-2xl min-h-[70vh] bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
-        <CardHeader className="p-4 pb-3">
-          <CardTitle className="text-white text-lg font-bold">
-            Poker Table: {table.name || normalizedJoinCode}
-          </CardTitle>
-          <div className="text-gray-300 text-sm leading-relaxed mt-2">
-            <div className="flex flex-col gap-1">
-              <div>Join Code: <span className="font-bold text-yellow-300 text-base">{normalizedJoinCode}</span></div>
-              <div>Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span></div>
+  <div 
+    className="min-h-[100dvh] h-[100dvh] flex flex-col bg-[#0b0f10] text-slate-100 relative"
+    style={showBackground ? {
+      backgroundImage: `url('/images/poker-bg.jpg')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center'
+    } : undefined}
+  >
+    {/* Dark overlay for background image */}
+    {showBackground && (
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm pointer-events-none" />
+    )}
+    
+    {/* Main content - relative positioning to be above overlay */}
+    <div className="relative z-10 h-full flex flex-col pt-safe pb-safe px-3">
+      {/* Zone 1: Header + Actions (auto height, compact) */}
+      <div className="flex-shrink-0 space-y-3">
+        {/* Header */}
+        <div className="rounded-2xl border border-emerald-700/25 bg-black/30 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg font-semibold tracking-tight text-white truncate">
+              {table.name || normalizedJoinCode}
+            </h1>
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <div className="text-xs text-slate-300">Join Code</div>
+              <div className="relative">
+                <button
+                  onClick={handleCopyJoinCode}
+                  className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  title="Copy join code"
+                  aria-label={`Copy join code: ${normalizedJoinCode}`}
+                >
+                  <span>{normalizedJoinCode}</span>
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+                {copied && (
+                  <div role="status" className="absolute -top-8 right-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md shadow-lg">
+                    Copied!
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-slate-200 text-right mt-1">
+                Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
+              </div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-4 pt-0 flex-1">
-          {/* ADDED: Show "Request to Join" button if not a player and not pending */}
-          {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
-            <div className="mb-4 p-3 border rounded-lg bg-black/50 border-blue-400/50">
-              <h3 className="font-semibold text-sm mb-2 text-white">You are viewing this table as a spectator.</h3>
-              {/* If profile is missing, explain cause & recovery */}
-              {!profile && (
-                <p className="text-xs text-yellow-300 mb-2">
-                  Your local profile or table selection is missing. This happens if you cleared browser storage/cache or restarted the device — it removes only the local identity and selection. Server data (tables, players, join requests, buy-ins, end-up values) is still intact.
-                  To recover: open Onboarding to recreate your profile, then request to join this table or ask the admin to re-add your player row.
-                </p>
-              )}
-              <p className="text-xs text-gray-300 mb-3">To participate, request to join. The admin will need to approve your request.</p>
-              <Button
-                onClick={handleRequestJoin}
-                className="w-full h-9"
-                variant="hero"
-                disabled={processingJoinRequestLocal || pendingJoinPlayerIds.has(profile?.id || '')}
-              >
-                <span role="img" aria-label="join">👋</span> Request to Join Table
-              </Button>
-            </div>
-          )}
+        </div>
 
-          {/* Show main content only if the user is a player on the table */}
-          {isPlayerOnTable && (
-            <>
-              {/* Buy-in request section */}
-              <div className="mb-4">
-                {/* Primary Action Buttons Row */}
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  {/* Buy-in button */}
-                  <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="hero"
-                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-emerald-500/90 to-green-600/90 hover:from-emerald-400/90 hover:to-green-500/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-emerald-400/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="buy-in" className="text-base drop-shadow-sm mr-2">💸</span>
-                        <span className="drop-shadow-sm">Buy-in Request</span>
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-xs w-80">
-                      <DialogHeader>
-                        <DialogTitle>Request Buy-in</DialogTitle>
-                      </DialogHeader>
-                      {/* Use a form so Enter key submits */}
-                      <form
-                        onSubmit={e => {
-                          e.preventDefault();
-                          // synchronous guard prevents double-submit before state updates
-                          if (processingBuyInRef.current || !amount.trim()) return;
-                          processingBuyInRef.current = true;
-                          setProcessingBuyIn(true);
-                          handleRequestBuyIn();
-                        }}
-                        className="space-y-2"
-                      >
-                        <Label htmlFor="amount">Amount (can be positive or negative)</Label>
-                        <Input
-                          id="amount"
-                          type="number"
-                          inputMode="decimal"
-                          value={amount}
-                          onChange={e => setAmount(e.target.value)}
-                          className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-                          autoFocus
-                        />
-                        <DialogFooter>
-                          <Button type="submit" disabled={processingBuyInRef.current || !amount.trim()}>
-                            {processingBuyIn ? 'Sending...' : 'Submit'}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
+        {/* Spectator Join Request */}
+        {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
+          <div className="py-3 px-3 border rounded-lg bg-black/60 border-emerald-700/30">
+            <h3 className="font-semibold text-base mb-2 text-white">Viewing as spectator</h3>
+            {!profile && (
+              <p className="text-sm text-red-300 mb-2">
+                Your profile is missing. Open Onboarding to recreate it, then request to join.
+              </p>
+            )}
+            <p className="text-sm text-slate-200 mb-3">Request to join. Admin approval required.</p>
+            <Button
+              onClick={handleRequestJoin}
+              className="w-full h-10 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+              disabled={processingJoinRequestLocal || pendingJoinPlayerIds.has(profile?.id || '')}
+              aria-label="Request to join poker table"
+            >
+              <span role="img" aria-label="wave" className="mr-2">👋</span> Request to Join
+            </Button>
+          </div>
+        )}
 
-                  {/* History button */}
-                  <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
-                    <HistoryDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-slate-700/90 to-slate-800/90 hover:from-slate-600/90 hover:to-slate-700/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-slate-500/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="history" className="text-base drop-shadow-sm mr-2">📜</span>
-                        <span className="drop-shadow-sm">History</span>
-                      </Button>
-                    </HistoryDialogTrigger>
-                    <HistoryDialogContent
-                      className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-md"
-                      style={{ width: '400px', maxWidth: '90vw' }}
+        {/* Player Actions */}
+        {isPlayerOnTable && (
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/30 p-3">
+            <h3 className="text-sm font-medium text-slate-200 mb-3">Actions</h3>
+            
+            {/* Primary Buy-in Button */}
+            <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
+              <DialogTrigger asChild>
+                <button 
+                  className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  aria-label="Request buy-in from table admin"
+                >
+                  <Banknote className="w-5 h-5" aria-hidden="true" />
+                  Buy-in
+                </button>
+              </DialogTrigger>
+              <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
+                <DialogHeader>
+                  <DialogTitle className="text-lg font-bold text-white">Request Buy-in</DialogTitle>
+                </DialogHeader>
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    if (processingBuyInRef.current || !amount.trim()) return;
+                    processingBuyInRef.current = true;
+                    setProcessingBuyIn(true);
+                    handleRequestBuyIn();
+                  }}
+                  className="space-y-4"
+                >
+                  <Label htmlFor="amount" className="text-sm font-semibold text-gray-300">Amount</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
+                    className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
+                    autoFocus
+                  />
+                  <DialogFooter>
+                    <Button
+                      type="submit"
+                      disabled={processingBuyInRef.current || !amount.trim()}
+                      className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/60"
+                      aria-label="Submit buy-in request"
                     >
-                      <HistoryDialogHeader>
-                        <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
-                      </HistoryDialogHeader>
-                      <div style={{
-                        fontSize: '11px',
-                        overflowX: 'auto',
-                        overflowY: 'auto',
-                        maxHeight: '60vh'
-                      }}>
-                        <UITable>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead style={{ minWidth: 60, padding: '2px 4px' }}>Player</TableHead>
-                              {(() => {
-                                const playerBuyIns = players.map((p: any) =>
-                                  historyData.filter((row: any) => row.player_id === p.id)
-                                );
-                                const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                                return Array.from({ length: maxBuyIns }).map((_, idx) => (
-                                  <TableHead key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
-                                    {idx + 1}
-                                  </TableHead>
-                                ));
-                              })()}
+                      {processingBuyIn ? 'Sending...' : 'Submit'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            {/* Secondary Actions Grid */}
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              {/* History button */}
+              <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
+                <HistoryDialogTrigger asChild>
+                  <button 
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    aria-label="View buy-in history"
+                  >
+                    <ScrollText className="w-4 h-4" aria-hidden="true" />
+                    History
+                  </button>
+                </HistoryDialogTrigger>
+                <HistoryDialogContent
+                  className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+                  style={{ width: '400px', maxWidth: '90vw' }}
+                >
+                  <HistoryDialogHeader>
+                    <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
+                  </HistoryDialogHeader>
+                  <div style={{
+                    fontSize: '14px',
+                    overflowX: 'auto',
+                    overflowY: 'auto',
+                    maxHeight: '60vh'
+                  }}>
+                    <UITable>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 80, padding: '8px' }}>Player</TableHead>
+                          {(() => {
+                            const playerBuyIns = players.map((p: any) =>
+                              historyData.filter((row: any) => row.player_id === p.id)
+                            );
+                            const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
+                            return Array.from({ length: maxBuyIns }).map((_, idx) => (
+                              <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 50, padding: '8px' }}>
+                                {idx + 1}
+                              </TableHead>
+                            ));
+                          })()}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {players.map((p: any) => {
+                          const buyIns = historyData
+                            .filter((row: any) => row.player_id === p.id)
+                            .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                          return (
+                            <TableRow key={p.id} className="border-b border-gray-700/40">
+                              <TableCell className="text-white font-medium text-sm truncate" style={{ minWidth: 80, maxWidth: 120, padding: '8px' }}>{p.name}</TableCell>
+                              {buyIns.map((row: any, idx: number) => (
+                                <TableCell key={idx} className="text-emerald-300 font-mono text-right text-sm" style={{ minWidth: 50, padding: '8px' }}>
+                                  {parseInt(row.amount, 10)}
+                                </TableCell>
+                              ))}
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {players.map((p: any) => {
-                              const buyIns = historyData
-                                .filter((row: any) => row.player_id === p.id)
-                                .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                              return (
-                                <TableRow key={p.id}>
-                                  <TableCell style={{ minWidth: 60, padding: '2px 4px' }}>{p.name}</TableCell>
-                                  {buyIns.map((row: any, idx: number) => (
-                                    <TableCell key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
-                                      {parseInt(row.amount, 10)}
-                                    </TableCell>
-                                  ))}
-                                  {Array.from({ length: Math.max(0, (() => {
-                                    const playerBuyIns = players.map((pl: any) =>
-                                      historyData.filter((row: any) => row.player_id === pl.id)
-                                    );
-                                    const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                                    return maxBuyIns - buyIns.length;
-                                  })()) }).map((_, idx) => (
-                                    <TableCell key={`empty-${idx}`} style={{ minWidth: 40, padding: '2px 4px' }}></TableCell>
-                                  ))}
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </UITable>
-                      </div>
-                      <HistoryDialogFooter>
-                        <Button variant="secondary" onClick={() => setOpenHistory(false)}>Close</Button>
-                      </HistoryDialogFooter>
-                    </HistoryDialogContent>
-                  </HistoryDialog>
-                </div>
+                          );
+                        })}
+                      </TableBody>
+                    </UITable>
+                  </div>
+                  <HistoryDialogFooter>
+                    <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
+                  </HistoryDialogFooter>
+                </HistoryDialogContent>
+              </HistoryDialog>
 
-                {/* Secondary Action Buttons Row */}
-                <div className="grid grid-cols-3 gap-2">
-                  {/* End Up button */}
-                  {(() => {
-                    // show End Up button to everyone (admin edits, regular users read-only)
-                    if (!isAdmin) {
-                      console.log('[PokerTable.UI] End Up visible (read-only) for regular player', { profileId: profile?.id });
-                    } else {
-                      console.log('[PokerTable.UI] End Up visible (editable) for admin', { profileId: profile?.id });
-                    }
-                    return true;
-                  })() && (
-                    <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="group relative w-full h-9 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-amber-600/80 to-yellow-700/80 hover:from-amber-500/80 hover:to-yellow-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-amber-400/20 transition-all duration-300 transform hover:scale-[1.02]"
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                          <span role="img" aria-label="end-up" className="text-sm drop-shadow-sm mr-1">🏁</span>
-                          <span className="drop-shadow-sm">End Up</span>
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent
-                        className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-md"
-                        style={{
-                          width: '400px',
-                          maxWidth: '90vw',
-                          padding: '16px',
-                          minHeight: '500px',
-                          maxHeight: '90vh',
-                          touchAction: 'manipulation',
-                          userSelect: 'none'
-                        }}
-                      >
-                        <DialogHeader>
-                          <DialogTitle>End Up Game</DialogTitle>
-                        </DialogHeader>
-                        <div
-                          style={{
-                            fontSize: '10px',
-                            height: '450px',
-                            maxHeight: '70vh',
-                            overflowX: 'auto',
-                            overflowY: 'auto',
-                            padding: '0',
-                            touchAction: 'manipulation'
-                          }}
-                        >
-                          <UITable style={{ width: 'auto', height: '100%', touchAction: 'manipulation' }}>
-                            <TableHeader>
-                              <TableRow className="border-b-white/20">
-                                <TableHead className="text-white" style={{
-                                  minWidth: '75px',
-                                  padding: '4px',
-                                  fontSize: '11px',
-                                  whiteSpace: 'nowrap',
-                                }}>Player</TableHead>
-                                <TableHead className="text-white" style={{
-                                  minWidth: '65px',
-                                  padding: '4px',
-                                  textAlign: 'center',
-                                  fontSize: '11px',
-                                  whiteSpace: 'nowrap',
-                                }}>Buy-ins</TableHead>
-                                <TableHead className="text-white" style={{
-                                  minWidth: '85px',
-                                  padding: '4px',
-                                  textAlign: 'center',
-                                  fontSize: '11px'
-                                }}>End Up</TableHead>
-                                <TableHead className="text-white" style={{
-                                  minWidth: '75px',
-                                  padding: '4px',
-                                  textAlign: 'center',
-                                  fontSize: '11px'
-                                }}>Profit/7</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {Array.isArray(players) && players.map((p: any) => {
-                                const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                                const endUp = endUpValues[p.id] ?? 0;
-                                const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
-                                return (
-                                  <TableRow
-                                    key={p.id}
-                                    className="border-b-white/10"
-                                    style={{ minHeight: 28 }}
-                                  >
-                                    <TableCell style={{
-                                      padding: '4px 6px',
-                                      fontSize: '11px',
-                                      height: 28,
-                                      verticalAlign: 'middle',
-                                      minWidth: '75px',
-                                      maxWidth: '75px',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis'
-                                    }}>{p.name}</TableCell>
-                                    <TableCell style={{
-                                      padding: '4px 6px',
-                                      textAlign: 'center',
-                                      fontSize: '11px',
-                                      height: 28,
-                                      verticalAlign: 'middle',
-                                      minWidth: '65px'
-                                    }}>
-                                      {totalBuyIns}
-                                    </TableCell>
-                                    <TableCell style={{
-                                      padding: '4px 6px',
-                                      textAlign: 'center',
-                                      fontSize: '11px',
-                                      height: 28,
-                                      verticalAlign: 'middle',
-                                      minWidth: '85px'
-                                    }}>
-                                      <Input
-                                        type="number"
-                                        step="any"
-                                        disabled={!isAdmin}
-                                        className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-                                        style={{
-                                          width: 78,
-                                          height: 26,
-                                          fontSize: '16px',
-                                          padding: '4px 6px',
-                                          textAlign: 'center',
-                                          lineHeight: '18px',
-                                          touchAction: 'manipulation',
-                                          transform: 'scale(1)',
-                                          transformOrigin: 'center'
-                                        }}
-                                        value={endUp}
-                                        onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
-                                        onFocus={(e) => {
-                                          e.target.style.fontSize = '16px';
-                                          e.target.addEventListener('blur', () => {
-                                            e.target.style.fontSize = '16px';
-                                          });
-                                        }}
-                                      />
-                                    </TableCell>
-                                    <TableCell style={{
-                                      padding: '4px 6px',
-                                      textAlign: 'center',
-                                      fontSize: '11px',
-                                      height: 28,
-                                                                           verticalAlign: 'middle',
-                                      minWidth: '75px'
-                                    }}>
-                                      {profitDiv7}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                              {/* Totals row */}
-                              <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
-                                <TableCell style={{ fontSize: '11px', padding: '4px 6px', height: 28, verticalAlign: 'middle', minWidth: '75px' }}>Total</TableCell>
-                                <TableCell style={{
-                                  textAlign: 'center',
-                                  fontSize: '11px',
-                                  padding: '4px 6px',
-                                  height: 28,
-                                  verticalAlign: 'middle',
-                                  minWidth: '65px'
-                                }}>
-                                  {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
-                                </TableCell>
-                                <TableCell style={{
-                                  textAlign: 'center',
-                                  fontSize: '11px',
-                                  padding: '4px 6px',
-                                  height: 28,
-                                  verticalAlign: 'middle'
-                                }}>
-                                  {Object.values(endUpValues).reduce((sum, v) => sum + parseFloat(String(v)), 0)}
-                                </TableCell>
-                                <TableCell style={{
-                                  textAlign: 'center',
-                                  fontSize: '11px',
-                                  padding: '4px 6px',
-                                  height: 28,
-                                  verticalAlign: 'middle'
-                                }}>
-                                  {
-                                    players.length > 0
-                                      ? players.reduce((sum: number, p: any) => {
-                                          const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                                          const endUp = endUpValues[p.id] ?? 0;
-                                          return sum + (endUp - totalBuyIns) / 7;
-                                      }, 0).toFixed(2)
-                                      : '0.00'
-                                  }
-                                </TableCell>
-                              </TableRow>
-                            </TableBody>
-                          </UITable>
-                        </div>
-                        <DialogFooter>
-                          <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
+              {/* End Up button */}
+              <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
+                <DialogTrigger asChild>
+                  <button 
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    aria-label="View end game calculations"
+                  >
+                    <Flag className="w-4 h-4" aria-hidden="true" />
+                    End Up
+                  </button>
+                </DialogTrigger>
+                <DialogContent
+                  className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+                  style={{
+                    width: '400px',
+                    maxWidth: '90vw',
+                    padding: '20px',
+                    minHeight: '500px',
+                    maxHeight: '90vh'
+                  }}
+                >
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">End Up Game</DialogTitle>
+                  </DialogHeader>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      height: '450px',
+                      maxHeight: '70vh',
+                      overflowX: 'auto',
+                      overflowY: 'auto',
+                      padding: '0'
+                    }}
+                  >
+                    <UITable>
+                      <TableHeader>
+                        <TableRow className="border-b border-gray-600/40">
+                          <TableHead className="text-slate-200 font-semibold text-sm" style={{
+                            minWidth: '90px',
+                            padding: '8px',
+                            whiteSpace: 'nowrap'
+                          }}>Player</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
+                            minWidth: '80px',
+                            padding: '8px',
+                            whiteSpace: 'nowrap'
+                          }}>Buy-ins</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
+                            minWidth: '90px',
+                            padding: '8px'
+                          }}>End Up</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
+                            minWidth: '80px',
+                            padding: '8px'
+                          }}>Profit/7</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Array.isArray(players) && players.map((p: any) => {
+                          const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                          const endUp = endUpValues[p.id] ?? 0;
+                          const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
+                          return (
+                            <TableRow
+                              key={p.id}
+                              className="border-b border-gray-700/40"
+                              style={{ minHeight: 40 }}
+                            >
+                              <TableCell className="text-white font-medium text-sm truncate" style={{
+                                padding: '8px',
+                                height: 40,
+                                verticalAlign: 'middle',
+                                minWidth: '90px',
+                                maxWidth: '90px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>{p.name}</TableCell>
+                              <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
+                                padding: '8px',
+                                height: 40,
+                                verticalAlign: 'middle',
+                                minWidth: '80px'
+                              }}>
+                                {totalBuyIns}
+                              </TableCell>
+                              <TableCell style={{
+                                padding: '8px',
+                                textAlign: 'right',
+                                height: 40,
+                                verticalAlign: 'middle',
+                                minWidth: '90px'
+                              }}>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  disabled={!isAdmin}
+                                  className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm font-mono text-right"
+                                  style={{
+                                    width: 85,
+                                    height: 32,
+                                    fontSize: '14px',
+                                    padding: '4px 8px'
+                                  }}
+                                  value={endUp}
+                                  onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
+                                />
+                              </TableCell>
+                              <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
+                                padding: '8px',
+                                height: 40,
+                                verticalAlign: 'middle',
+                                minWidth: '80px'
+                              }}>
+                                {profitDiv7}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </UITable>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
+                    {isAdmin && (
+                      <Button onClick={handleSaveEndUp} className="ml-2 bg-green-600 hover:bg-green-700 text-white font-semibold">
+                        Save End Up
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
-                          {/* Admin-only Save button persists via broadcast so everyone receives values */}
-                          {isAdmin && (
-                            <Button onClick={handleSaveEndUp} className="ml-2">
-                              Save End Up
-                            </Button>
-                          )}
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-
-                  {/* Edit Profile button */}
-                  <Button
-                    variant="outline"
-                    className="group relative w-full h-9 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-blue-600/80 to-indigo-700/80 hover:from-blue-500/80 hover:to-indigo-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-blue-400/20 transition-all duration-300 transform hover:scale-[1.02]"
+              {/* Edit Profile button */}
+              <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
+                <DialogTrigger asChild>
+                  <button
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     onClick={() => {
                       setEditName(profile?.name || '');
                       setEditError('');
                       setOpenEditProfile(true);
                     }}
+                    aria-label="Edit your profile name"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    <span role="img" aria-label="edit" className="text-sm drop-shadow-sm mr-1">✏️</span>
-                    <span className="drop-shadow-sm">Edit Profile</span>
-                  </Button>
-
-                  {/* Exit Table button */}
-                  <Dialog open={openExit} onOpenChange={setOpenExit}>
-                    <DialogTrigger asChild>
+                    <Pencil className="w-4 h-4" aria-hidden="true" />
+                    Edit Profile
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">Edit Profile</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    handleEditProfileSubmit();
+                  }}>
+                    <div className="space-y-4">
+                      <Label htmlFor="editName" className="text-sm font-semibold text-gray-300">New Name</Label>
+                      <Input
+                        id="editName"
+                        value={editName}
+                        onChange={handleEditNameChange}
+                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
+                        maxLength={30}
+                        autoFocus
+                      />
+                      {editError && (
+                        <div className="text-red-400 text-sm font-semibold mt-2">{editError}</div>
+                      )}
+                    </div>
+                    <DialogFooter className="mt-6">
                       <Button
-                        variant="outline"
-                        className="group relative w-full h-9 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-rose-600/80 to-red-700/80 hover:from-rose-500/80 hover:to-red-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-rose-400/20 transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 disabled:opacity-50"
-                        disabled={processingExit}
+                        type="submit"
+                        disabled={editSubmitting || !editName.trim()}
+                        className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/60"
+                        aria-label="Save profile changes"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span role="img" aria-label="exit" className="text-sm drop-shadow-sm mr-1">🚪</span>
-                        <span className="drop-shadow-sm">Exit Table</span>
+                        {editSubmitting ? 'Saving...' : 'Save'}
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-xs w-80">
-                      <DialogHeader>
-                        <DialogTitle>Exit Game</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-2 text-sm">
-                        <p>You will be moved to the table selection page.</p>
-                        <p className="text-gray-300 text-sm">Click Yes to continue.</p>
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          variant="secondary"
-                          onClick={() => setOpenExit(false)}
-                          disabled={processingExit}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={async () => {
-                            setOpenExit(false);
-                            await handleExitGame();
-                          }}
-                          disabled={processingExit}
-                        >
-                          Yes, Exit Table
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-              {/* Admin notification and approval UI */}
-              {isAdmin && pendingRequests.length > 0 && (
-                <Card className="mb-3 bg-gray-900/80 border-gray-700">
-                  <CardHeader className="p-2">
-                    <CardTitle className="text-white text-sm">Pending Buy-in Requests</CardTitle>
-                    <CardDescription className="text-gray-400 text-xs">Approve or reject buy-in requests below.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-2">
-                    <div className="space-y-2">
-                      {pendingRequests.map((r) => (
-                        <div key={r.id} className="flex items-center justify-between rounded-md border p-2 border-gray-700">
-                          <div>
-                            <div className="font-medium text-white">
-                              {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
-                            </div>
-                            <div className={`text-sm ${r.amount < 0 ? 'text-red-500' : 'text-yellow-400'}`}>
-                              {`${r.amount >= 0 ? '+' : ''}${r.amount.toFixed(2)}`}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleApprove(r.id)}
-                              disabled={processingRequests.includes(r.id)}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="bg-red-600 hover:bg-red-700 text-white"
-                              onClick={() => handleReject(r.id)}
-                              disabled={processingRequests.includes(r.id)}
-                            >
-                              Reject
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {/* Admin notification and approval UI for join requests */}
-              {isAdmin && pendingJoinRequests.length > 0 && (
-                <Card className="mb-3 bg-gray-900/80 border-gray-700">
-                  <CardHeader className="p-2">
-                    <CardTitle className="text-white text-sm">Pending Join Requests</CardTitle>
-                    <CardDescription className="text-gray-400 text-xs">Approve or reject player join requests below.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-2">
-                    <div className="space-y-2">
-                      {pendingJoinRequests.map((r) => {
-                        // Show only player name, hide player ID
-                        const playerObj = players.find((p: any) => p.id === r.player_id);
-                        const displayName = playerObj?.name || r.player_name || '';
-                        return (
-                          <div key={r.id} className="flex items-center justify-between rounded-md border p-2 border-gray-700">
-                            <div>
-                              <div className="font-medium text-white">
-                                {displayName}
-                              </div>
-                              <div className="text-sm text-gray-300">
-                                Join request
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button 
-                                size="sm" 
-                                onClick={() => handleApproveJoin(r.id)}
-                                disabled={processingJoinRequests.includes(r.id)}
-                              >
-                                Approve
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="destructive" 
-                                className="bg-red-600 hover:bg-red-700 text-white"
-                                onClick={() => handleRejectJoin(r.id)}
-                                disabled={processingJoinRequests.includes(r.id)}
-                              >
-                                Reject
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              {/* Player totals table */}
-              <Card className="mb-3 bg-gray-900/50 border-gray-700 rounded-lg">
-                <CardHeader className="p-3 pb-2">
-                  <CardTitle className="text-white text-sm font-semibold">Your Total Buy-ins</CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-0">
-                  {/* Show player name and total buy-ins with centered total */}
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-200 font-medium">
-                      {profile?.name}
-                    </div>
-                    <div className="text-4xl font-bold text-green-400">
-                      {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
 
-          <div className="mt-3" style={{ maxHeight: '280px', overflowY: 'auto' }}>
-            <div className="bg-gray-900/30 rounded-lg border border-gray-700">
-              <div className="p-3 border-b border-gray-700">
-                <h3 className="text-white text-sm font-semibold">All Players</h3>
-              </div>
-              <UITable>
-                <TableHeader>
-                  <TableRow className="border-b-green-400/30">
-                    <TableHead className="text-white py-2 px-3 text-sm font-medium">Player</TableHead>
-                    <TableHead className="text-right text-white py-2 px-3 text-sm font-medium">Total Buy-ins</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {/* Always show all players, regardless of active status.
-                    - Dim only real 'inactive' players (status === 'inactive').
-                    - Show '(Pending)' for players waiting admin approval (do not show red 'Exited'). */}
-                  {players.map((p: any) => {
-                    const isPending = !!p.pending;
-                    const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
-                    return (
-                      <TableRow key={p.id} className={`border-b-green-400/20 ${isInactive ? 'opacity-50' : ''} h-8`}>
-                        <TableCell className="font-medium text-white py-1.5 px-3 text-sm">
-                          {p.name}
-                          {isPending && (
-                            <span className="ml-2 text-xs text-yellow-400 bg-yellow-400/20 px-2 py-0.5 rounded-full">(Pending)</span>
-                          )}
-                          {isInactive && (
-                            <span className="ml-2 text-xs text-red-400 bg-red-400/20 px-2 py-0.5 rounded-full">(Exited)</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-white py-1.5 px-3 text-lg font-bold">
-                          {parseInt(String(playerTotals[p.id] ?? 0), 10)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </UITable>
+              {/* Exit Table button */}
+              <Dialog open={openExit} onOpenChange={setOpenExit}>
+                <DialogTrigger asChild>
+                  <button
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    disabled={processingExit}
+                    aria-label="Exit poker table"
+                  >
+                    <LogOut className="w-4 h-4" aria-hidden="true" />
+                    Exit Table
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 text-sm">
+                    <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
+                    <p className="text-gray-300 text-sm leading-relaxed">Click Yes to continue.</p>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setOpenExit(false)}
+                      disabled={processingExit}
+                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={async () => {
+                        setOpenExit(false);
+                        await handleExitGame();
+                      }}
+                      disabled={processingExit}
+                      className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                      aria-label="Confirm exit from poker table"
+                    >
+                      Yes, Exit Table
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      {/* Edit Profile dialog (always rendered, controlled by openEditProfile state) */}
-      <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
-        <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white max-w-xs w-80">
-          <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            handleEditProfileSubmit();
-          }}>
-            <div className="space-y-2">
-              <Label htmlFor="editName">New Name</Label>
-              <Input
-                id="editName"
-                value={editName}
-                onChange={handleEditNameChange}
-                className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-                maxLength={30}
-                autoFocus
-              />
-              {editError && (
-                <div className="text-red-500 text-sm mt-2">{editError}</div>
-              )}
+        {/* Admin Pending Requests */}
+        {isAdmin && (pendingRequests.length > 0 || pendingJoinRequests.length > 0) && (
+          <div className="bg-black/60 border border-red-500/40 rounded-lg py-3 px-3">
+            <h3 className="text-white text-sm font-semibold mb-2">Admin Actions</h3>
+            
+            {/* Buy-in requests */}
+            {pendingRequests.map((r) => (
+              <div key={r.id} className="flex items-center justify-between p-2 mb-2 border rounded border-slate-600/40 bg-slate-800/40">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white text-sm truncate">
+                    {players.find((p: any) => p.id === r.player_id)?.name || r.player_id}
+                  </div>
+                  <div className={`font-mono text-lg text-right ${r.amount < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+                    {`${r.amount >= 0 ? '+' : ''}${r.amount.toFixed(0)}`}
+                  </div>
+                </div>
+                <div className="flex gap-1 flex-shrink-0 ml-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleApprove(r.id)}
+                    disabled={processingRequests.includes(r.id)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    aria-label={`Approve buy-in request for ${players.find((p: any) => p.id === r.player_id)?.name || 'player'}`}
+                  >
+                    ✓
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                    onClick={() => handleReject(r.id)}
+                    disabled={processingRequests.includes(r.id)}
+                    aria-label={`Reject buy-in request for ${players.find((p: any) => p.id === r.player_id)?.name || 'player'}`}
+                  >
+                    ✗
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {/* Join requests */}
+            {pendingJoinRequests.map((r) => {
+              const playerObj = players.find((p: any) => p.id === r.player_id);
+              const displayName = playerObj?.name || r.player_name || '';
+              return (
+                <div key={r.id} className="flex items-center justify-between p-2 mb-2 border rounded border-slate-600/40 bg-slate-800/40">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-white text-sm truncate">{displayName}</div>
+                    <div className="text-slate-200 text-xs">Join request</div>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0 ml-2">
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleApproveJoin(r.id)}
+                      disabled={processingJoinRequests.includes(r.id)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                      aria-label={`Approve join request for ${displayName}`}
+                    >
+                      ✓
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="destructive" 
+                      className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      onClick={() => handleRejectJoin(r.id)}
+                      disabled={processingJoinRequests.includes(r.id)}
+                      aria-label={`Reject join request for ${displayName}`}
+                    >
+                      ✗
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Zone 2: Summary Row (auto height, compact) */}
+      {isPlayerOnTable && (
+        <div className="flex-shrink-0 my-3">
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/30 p-3 flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-slate-300">Your Buy-ins</div>
+              <div className="text-4xl md:text-5xl font-extrabold text-emerald-300 font-mono tabular-nums">
+                {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
+              </div>
             </div>
-            <DialogFooter>
-              <Button
-                type="submit"
-                disabled={editSubmitting || !editName.trim()}
-              >
-                {editSubmitting ? 'Saving...' : 'Save'}
+            <div className="text-right flex-shrink-0">
+              <div className="text-sm text-slate-300">
+                Total Pot ({players.length} player{players.length !== 1 ? 's' : ''})
+              </div>
+              <div className="text-lg md:text-xl font-semibold text-emerald-300 font-mono tabular-nums">
+                {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zone 3: Players Section (collapsed preview) */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="rounded-2xl border border-emerald-700/30 bg-black/40 overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between py-3 px-3 flex-shrink-0">
+            <h3 className="text-base font-semibold text-white">All Players</h3>
+            <button
+              onClick={() => setOpenPlayerModal(true)}
+              className="text-sm text-emerald-300 hover:text-emerald-200 font-medium flex-shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 px-1"
+              aria-label={`View all ${players.length} players`}
+            >
+              Show all ({players.length})
+            </button>
+          </div>
+          
+          {/* Preview list - top 5 players only */}
+          <div className="overflow-y-auto">
+            {getSortedPlayers().slice(0, 5).map((p: any, index: number) => {
+              const isPending = !!p.pending;
+              const isInactive = !p.pending && p.active === false;
+              const total = parseInt(String(playerTotals[p.id] ?? 0), 10);
+              
+              return (
+                <div 
+                  key={p.id} 
+                  className="flex items-center justify-between px-3 py-2 md:py-3 border-t border-emerald-800/10"
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="truncate max-w-[60%] text-sm font-medium text-white">{p.name}</span>
+                    {isPending && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/90 text-white font-semibold flex-shrink-0">
+                        Pending
+                      </span>
+                    )}
+                    {isInactive && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-slate-600/80 text-white font-medium flex-shrink-0">
+                        Exited
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
+                      {total}
+                    </div>
+                    {total !== 0 && (
+                      <div className="text-xs text-slate-400 tabular-nums">
+                        ${total}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Full-screen Player Modal */}
+      {openPlayerModal && (
+        <div className="fixed inset-0 bg-black/70 z-50">
+          <div className="p-3 h-full">
+            <div className="rounded-2xl bg-[#0f1419] border border-emerald-700/30 h-full flex flex-col overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between py-3 px-4 border-b border-emerald-800/20 flex-shrink-0">
+                <h2 className="text-lg font-semibold text-white">
+                  All Players ({players.length})
+                </h2>
+                <button
+                  onClick={() => setOpenPlayerModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  aria-label="Close player list modal"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {/* Search Input */}
+                <div className="py-3 px-4 border-b border-emerald-800/20">
+                  <input
+                    type="text"
+                    placeholder="Search players..."
+                    value={playerSearch}
+                    onChange={(e) => setPlayerSearch(e.target.value)}
+                    className="w-full h-10 rounded-lg bg-slate-800/70 px-3 text-sm text-white placeholder-slate-300 border border-slate-600/50 focus:border-emerald-500/50 focus:outline-none"
+                    aria-label="Search players by name"
+                  />
+                </div>
+
+                {/* Player List */}
+                <div>
+                  {getFilteredPlayers(getSortedPlayers()).map((p: any, index: number) => {
+                    const isPending = !!p.pending;
+                    const isInactive = !p.pending && p.active === false;
+                    const total = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                    
+                    return (
+                      <div 
+                        key={p.id} 
+                        className="flex items-center justify-between py-2 md:py-3 px-4 border-b border-emerald-800/10 hover:bg-emerald-950/20"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="font-medium text-white text-sm truncate">{p.name}</span>
+                          {isPending && (
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/90 text-white font-semibold flex-shrink-0">
+                              Pending
+                            </span>
+                          )}
+                          {isInactive && (
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-slate-600/80 text-white font-medium flex-shrink-0">
+                              Exited
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
+                            {total}
+                          </div>
+                          {total !== 0 && (
+                            <div className="text-xs text-slate-300 tabular-nums">
+                              ${total}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Dialog */}
+      <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
+        <HistoryDialogContent
+          className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+          style={{ width: '400px', maxWidth: '90vw' }}
+        >
+          <HistoryDialogHeader>
+            <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
+          </HistoryDialogHeader>
+          <div style={{
+            fontSize: '14px',
+            overflowX: 'auto',
+            overflowY: 'auto',
+            maxHeight: '60vh'
+          }}>
+            <UITable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 80, padding: '8px' }}>Player</TableHead>
+                  {(() => {
+                    const playerBuyIns = players.map((p: any) =>
+                      historyData.filter((row: any) => row.player_id === p.id)
+                    );
+                    const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
+                    return Array.from({ length: maxBuyIns }).map((_, idx) => (
+                      <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 50, padding: '8px' }}>
+                        {idx + 1}
+                      </TableHead>
+                    ));
+                  })()}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {players.map((p: any) => {
+                  const buyIns = historyData
+                    .filter((row: any) => row.player_id === p.id)
+                    .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                  return (
+                    <TableRow key={p.id} className="border-b border-gray-700/40">
+                      <TableCell className="text-white font-medium text-sm truncate" style={{ minWidth: 80, maxWidth: 120, padding: '8px' }}>{p.name}</TableCell>
+                      {buyIns.map((row: any, idx: number) => (
+                        <TableCell key={idx} className="text-emerald-300 font-mono text-right text-sm" style={{ minWidth: 50, padding: '8px' }}>
+                          {parseInt(row.amount, 10)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </UITable>
+          </div>
+          <HistoryDialogFooter>
+            <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
+          </HistoryDialogFooter>
+        </HistoryDialogContent>
+      </HistoryDialog>
+
+      {/* End Up Dialog */}
+      <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
+        <DialogContent
+          className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+          style={{
+            width: '400px',
+            maxWidth: '90vw',
+            padding: '20px',
+            minHeight: '500px',
+            maxHeight: '90vh'
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white">End Up Game</DialogTitle>
+          </DialogHeader>
+          <div
+            style={{
+              fontSize: '14px',
+              height: '450px',
+              maxHeight: '70vh',
+              overflowX: 'auto',
+              overflowY: 'auto',
+              padding: '0'
+            }}
+          >
+            <UITable>
+              <TableHeader>
+                <TableRow className="border-b border-gray-600/40">
+                  <TableHead className="text-slate-200 font-semibold text-sm" style={{
+                    minWidth: '90px',
+                    padding: '8px',
+                    whiteSpace: 'nowrap'
+                  }}>Player</TableHead>
+                  <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
+                    minWidth: '80px',
+                    padding: '8px',
+                    whiteSpace: 'nowrap'
+                  }}>Buy-ins</TableHead>
+                  <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
+                    minWidth: '90px',
+                    padding: '8px'
+                  }}>End Up</TableHead>
+                  <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
+                    minWidth: '80px',
+                    padding: '8px'
+                  }}>Profit/7</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.isArray(players) && players.map((p: any) => {
+                  const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                  const endUp = endUpValues[p.id] ?? 0;
+                  const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
+                  return (
+                    <TableRow
+                      key={p.id}
+                      className="border-b border-gray-700/40"
+                      style={{ minHeight: 40 }}
+                    >
+                      <TableCell className="text-white font-medium text-sm truncate" style={{
+                        padding: '8px',
+                        height: 40,
+                        verticalAlign: 'middle',
+                        minWidth: '90px',
+                        maxWidth: '90px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>{p.name}</TableCell>
+                      <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
+                        padding: '8px',
+                        height: 40,
+                        verticalAlign: 'middle',
+                        minWidth: '80px'
+                      }}>
+                        {totalBuyIns}
+                      </TableCell>
+                      <TableCell style={{
+                        padding: '8px',
+                        textAlign: 'right',
+                        height: 40,
+                        verticalAlign: 'middle',
+                        minWidth: '90px'
+                      }}>
+                        <Input
+                          type="number"
+                          step="any"
+                          disabled={!isAdmin}
+                          className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm font-mono text-right"
+                          style={{
+                            width: 85,
+                            height: 32,
+                            fontSize: '14px',
+                            padding: '4px 8px'
+                          }}
+                          value={endUp}
+                          onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
+                        />
+                      </TableCell>
+                      <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
+                        padding: '8px',
+                        height: 40,
+                        verticalAlign: 'middle',
+                        minWidth: '80px'
+                      }}>
+                        {profitDiv7}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </UITable>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
+            {isAdmin && (
+              <Button onClick={handleSaveEndUp} className="ml-2 bg-green-600 hover:bg-green-700 text-white font-semibold">
+                Save End Up
               </Button>
-            </DialogFooter>
-          </form>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exit Dialog */}
+      <Dialog open={openExit} onOpenChange={setOpenExit}>
+        <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
+            <p className="text-gray-300 text-sm leading-relaxed">Click Yes to continue.</p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setOpenExit(false)}
+              disabled={processingExit}
+              className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                setOpenExit(false);
+                await handleExitGame();
+              }}
+              disabled={processingExit}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+              aria-label="Confirm exit from poker table"
+            >
+              Yes, Exit Table
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  </div>
   );
 };
-
-export default PokerTable;
 
 /*
   The request for a buy-in that is not approved yet is maintained in the table:
@@ -2103,3 +2364,5 @@ export default PokerTable;
   The approved points information is maintained in the table:
     buy_ins
 */
+
+export default PokerTable;
