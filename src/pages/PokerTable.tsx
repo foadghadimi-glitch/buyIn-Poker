@@ -1451,46 +1451,35 @@ useEffect(() => {
 
 return (
     <div
-      className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-cover"
+      className="min-h-screen flex items-center justify-center p-2 sm:p-4 bg-cover"
       style={{
         backgroundImage: "url('/Poker_06.png')",
-        backgroundPosition: 'center 85%', // Explicitly shifts the image up. Adjust 85% to fine-tune.
+        backgroundPosition: 'center 85%',
       }}
     >
       <Card className="w-full max-w-2xl bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
-        <CardHeader>
-          <CardTitle className="text-white">
+        <CardHeader className="p-3">
+          <CardTitle className="text-white text-lg">
             Poker Table: {table.name || normalizedJoinCode}
           </CardTitle>
-          <CardDescription className="text-gray-300">
+          <CardDescription className="text-gray-300 text-sm leading-tight">
             Join Code: <span className="font-bold text-yellow-300">{normalizedJoinCode}</span> <br />
-            {/* FIX: prefer local adminName state first so admin sees immediate updates */}
             Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           {/* ADDED: Show "Request to Join" button if not a player and not pending */}
           {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
-            <div className="mb-6 p-4 border rounded-lg bg-black/50 border-blue-400/50">
-              <h3 className="font-semibold text-lg mb-2 text-white">You are viewing this table as a spectator.</h3>
+            <div className="mb-4 p-3 border rounded-lg bg-black/50 border-blue-400/50">
+              <h3 className="font-semibold text-base mb-2 text-white">You are viewing this table as a spectator.</h3>
               {/* If profile is missing, explain cause & recovery */}
               {!profile && (
-                <p className="text-sm text-yellow-300 mb-2">
+                <p className="text-xs text-yellow-300 mb-2">
                   Your local profile or table selection is missing. This happens if you cleared browser storage/cache or restarted the device — it removes only the local identity and selection. Server data (tables, players, join requests, buy-ins, end-up values) is still intact.
                   To recover: open Onboarding to recreate your profile, then request to join this table or ask the admin to re-add your player row.
                 </p>
               )}
-              {/* NEW: magic link explanation for authenticated users */}
-              {/*
-                If the user signed up using an email magic-link (or another auth provider),
-                clicking the sign-in link later will restore the same server-linked profile
-                (Jack) on any device where you complete the sign-in. Magic links create an
-                auth session that persists until it expires or you sign out. If you used the
-                anonymous/no-auth flow instead, save a recovery token or sign in with email
-                to enable cross-device/profile recovery.
-              */}
-              {(!profile && false) && null}
-              <p className="text-sm text-gray-300 mb-4">To participate, request to join. The admin will need to approve your request.</p>
+              <p className="text-xs text-gray-300 mb-3">To participate, request to join. The admin will need to approve your request.</p>
               <Button
                 onClick={handleRequestJoin}
                 className="w-full"
@@ -1506,7 +1495,7 @@ return (
           {isPlayerOnTable && (
             <>
               {/* Buy-in request section */}
-              <div className="mb-6 flex gap-2 items-center flex-wrap">
+              <div className="mb-4 flex gap-2 items-center flex-wrap">
                 {/* Buy-in button (always visible) */}
                 <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                   <DialogTrigger asChild>
@@ -1838,12 +1827,12 @@ return (
               </div>
               {/* Admin notification and approval UI */}
               {isAdmin && pendingRequests.length > 0 && (
-                <Card className="mb-6 bg-gray-900/80 border-gray-700">
-                  <CardHeader>
-                    <CardTitle className="text-white">Pending Buy-in Requests</CardTitle>
-                    <CardDescription className="text-gray-400">Approve or reject buy-in requests below.</CardDescription>
+                <Card className="mb-4 bg-gray-900/80 border-gray-700">
+                  <CardHeader className="p-3">
+                    <CardTitle className="text-white text-base">Pending Buy-in Requests</CardTitle>
+                    <CardDescription className="text-gray-400 text-sm">Approve or reject buy-in requests below.</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-3">
                     <div className="space-y-3">
                       {pendingRequests.map((r) => (
                         <div key={r.id} className="flex items-center justify-between rounded-md border p-3 border-gray-700">
@@ -1881,12 +1870,12 @@ return (
               )}
               {/* Admin notification and approval UI for join requests */}
               {isAdmin && pendingJoinRequests.length > 0 && (
-                <Card className="mb-6 bg-gray-900/80 border-gray-700">
-                  <CardHeader>
-                    <CardTitle className="text-white">Pending Join Requests</CardTitle>
-                    <CardDescription className="text-gray-400">Approve or reject player join requests below.</CardDescription>
+                <Card className="mb-4 bg-gray-900/80 border-gray-700">
+                  <CardHeader className="p-3">
+                    <CardTitle className="text-white text-base">Pending Join Requests</CardTitle>
+                    <CardDescription className="text-gray-400 text-sm">Approve or reject player join requests below.</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-3">
                     <div className="space-y-3">
                       {pendingJoinRequests.map((r) => {
                         // Show only player name, hide player ID
@@ -1928,20 +1917,20 @@ return (
                 </Card>
               )}
               {/* Player totals table */}
-              <Card className="mb-6 bg-gray-900/50 border-gray-700">
-                <CardHeader className="p-4">
-                  <CardTitle className="text-white">Total Buy-ins</CardTitle>
-                  <CardDescription className="text-gray-400">
+              <Card className="mb-3 bg-gray-900/50 border-gray-700">
+                <CardHeader className="p-2">
+                  <CardTitle className="text-white text-sm">Total Buy-ins</CardTitle>
+                  <CardDescription className="text-gray-400 text-xs">
                     Your total approved buy-ins for this table.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 pt-0">
+                <CardContent className="p-2 pt-0">
                   {/* Show only the current user's total buy-ins */}
-                  <div className="flex flex-col items-center justify-center py-2">
-                    <div className="text-4xl font-bold text-white">
+                  <div className="flex flex-col items-center justify-center py-1">
+                    <div className="text-xl font-bold text-white">
                       {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
                     </div>
-                    <div className="text-gray-200 mt-2">
+                    <div className="text-gray-200 text-xs">
                       Player: {profile?.name}
                     </div>
                   </div>
@@ -1950,7 +1939,7 @@ return (
             </>
           )}
 
-          <div className="mt-4" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+          <div className="mt-3" style={{ maxHeight: '250px', overflowY: 'auto' }}>
             <UITable>
               <TableHeader>
                 <TableRow className="border-b-green-400/30">
