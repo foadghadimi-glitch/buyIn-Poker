@@ -1451,14 +1451,14 @@ useEffect(() => {
 
 return (
     <div
-      className="min-h-screen flex items-center justify-center p-2 sm:p-4 bg-cover"
+      className="min-h-screen flex items-start justify-center pt-4 pb-4 px-2 sm:px-4 bg-cover"
       style={{
         backgroundImage: "url('/Poker_06.png')",
         backgroundPosition: 'center 85%',
       }}
     >
-      <Card className="w-full max-w-2xl bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
-        <CardHeader className="p-3">
+      <Card className="w-full max-w-2xl min-h-[85vh] bg-black/70 backdrop-blur-sm border border-green-400/50 shadow-lg text-gray-100">
+        <CardHeader className="p-4">
           <CardTitle className="text-white text-lg">
             Poker Table: {table.name || normalizedJoinCode}
           </CardTitle>
@@ -1467,7 +1467,7 @@ return (
             Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-3">
+        <CardContent className="p-4 flex-1">
           {/* ADDED: Show "Request to Join" button if not a player and not pending */}
           {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
             <div className="mb-4 p-3 border rounded-lg bg-black/50 border-blue-400/50">
@@ -1495,377 +1495,390 @@ return (
           {isPlayerOnTable && (
             <>
               {/* Buy-in request section */}
-              <div className="mb-4 flex gap-2 items-center flex-wrap">
-                {/* Buy-in button (always visible) */}
-                <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="hero"
-                      className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 transition-all"
-                    >
-                      <span role="img" aria-label="buy-in">💸</span>
-                      Buy-in
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
-                    <DialogHeader>
-                      <DialogTitle>Request Buy-in</DialogTitle>
-                    </DialogHeader>
-                    {/* Use a form so Enter key submits */}
-                    <form
-                      onSubmit={e => {
-                        e.preventDefault();
-                        // synchronous guard prevents double-submit before state updates
-                        if (processingBuyInRef.current || !amount.trim()) return;
-                        processingBuyInRef.current = true;
-                        setProcessingBuyIn(true);
-                        handleRequestBuyIn();
-                      }}
-                      className="space-y-2"
-                    >
-                      <Label htmlFor="amount">Amount (can be positive or negative)</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={e => setAmount(e.target.value)}
-                        className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-                        autoFocus
-                      />
-                      <DialogFooter>
-                        <Button type="submit" disabled={processingBuyInRef.current || !amount.trim()}>
-                          {processingBuyIn ? 'Sending...' : 'Submit'}
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-
-                {/* History button (always visible, comes after buy-in request) */}
-                <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
-                  <HistoryDialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-blue-600 hover:bg-blue-700 text-white border-none flex items-center gap-1 transition-all"
-                    >
-                      <span role="img" aria-label="history">📜</span>
-                      History
-                    </Button>
-                  </HistoryDialogTrigger>
-                  <HistoryDialogContent
-                    className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
-                    style={{ minWidth: 350, maxWidth: 600 }}
-                  >
-                    <HistoryDialogHeader>
-                      <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
-                    </HistoryDialogHeader>
-                    <div style={{
-                      fontSize: '11px',
-                      overflowX: 'auto',
-                      overflowY: 'auto',
-                      maxHeight: '60vh'
-                    }}>
-                      <UITable>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead style={{ minWidth: 60, padding: '2px 4px' }}>Player</TableHead>
-                            {(() => {
-                              const playerBuyIns = players.map((p: any) =>
-                                historyData.filter((row: any) => row.player_id === p.id)
-                              );
-                              const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                              return Array.from({ length: maxBuyIns }).map((_, idx) => (
-                                <TableHead key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
-                                  {idx + 1}
-                                </TableHead>
-                              ));
-                            })()}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {players.map((p: any) => {
-                            const buyIns = historyData
-                              .filter((row: any) => row.player_id === p.id)
-                              .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-                            return (
-                              <TableRow key={p.id}>
-                                <TableCell style={{ minWidth: 60, padding: '2px 4px' }}>{p.name}</TableCell>
-                                {buyIns.map((row: any, idx: number) => (
-                                  <TableCell key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
-                                    {parseInt(row.amount, 10)}
-                                  </TableCell>
-                                ))}
-                                {Array.from({ length: Math.max(0, (() => {
-                                  const playerBuyIns = players.map((pl: any) =>
-                                    historyData.filter((row: any) => row.player_id === pl.id)
-                                  );
-                                  const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                                  return maxBuyIns - buyIns.length;
-                                })()) }).map((_, idx) => (
-                                  <TableCell key={`empty-${idx}`} style={{ minWidth: 40, padding: '2px 4px' }}></TableCell>
-                                ))}
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </UITable>
-                    </div>
-                    <HistoryDialogFooter>
-                      <Button variant="secondary" onClick={() => setOpenHistory(false)}>Close</Button>
-                    </HistoryDialogFooter>
-                  </HistoryDialogContent>
-                </HistoryDialog>
-
-                {/* End Up button (visible to all players; inputs editable only by admin) */}
-                {(() => {
-                  // show End Up button to everyone (admin edits, regular users read-only)
-                  if (!isAdmin) {
-                    console.log('[PokerTable.UI] End Up visible (read-only) for regular player', { profileId: profile?.id });
-                  } else {
-                    console.log('[PokerTable.UI] End Up visible (editable) for admin', { profileId: profile?.id });
-                  }
-                  return true;
-                })() && (
-                  <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
+              <div className="mb-3">
+                {/* Primary Action Buttons Row */}
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  {/* Buy-in button */}
+                  <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                     <DialogTrigger asChild>
                       <Button
-                        variant="outline"
-                        className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-purple-600 hover:bg-purple-700 text-white border-none flex items-center gap-1 transition-all"
+                        variant="hero"
+                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-emerald-500/90 to-green-600/90 hover:from-emerald-400/90 hover:to-green-500/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-emerald-400/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
                       >
-                        <span role="img" aria-label="end-up">🏁</span>
-                        End Up
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                        <span role="img" aria-label="buy-in" className="text-lg drop-shadow-sm">💸</span>
+                        <span className="drop-shadow-sm">Buy-in Request</span>
                       </Button>
                     </DialogTrigger>
-                    <DialogContent
-                      className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
-                      style={{
-                        display: 'inline-block',
-                        padding: '4px',
-                        minHeight: '550px',
-                        maxHeight: '90vh'
-                      }}
-                    >
+                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
                       <DialogHeader>
-                        <DialogTitle>End Up Game</DialogTitle>
+                        <DialogTitle>Request Buy-in</DialogTitle>
                       </DialogHeader>
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          height: '450px',
-                          maxHeight: '70vh',
-                          overflowX: 'auto',
-                          overflowY: 'auto',
-                          padding: '0'
+                      {/* Use a form so Enter key submits */}
+                      <form
+                        onSubmit={e => {
+                          e.preventDefault();
+                          // synchronous guard prevents double-submit before state updates
+                          if (processingBuyInRef.current || !amount.trim()) return;
+                          processingBuyInRef.current = true;
+                          setProcessingBuyIn(true);
+                          handleRequestBuyIn();
                         }}
+                        className="space-y-2"
                       >
-                        <UITable style={{ width: 'auto', height: '100%' }}>
+                        <Label htmlFor="amount">Amount (can be positive or negative)</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          inputMode="decimal"
+                          value={amount}
+                          onChange={e => setAmount(e.target.value)}
+                          className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                          autoFocus
+                        />
+                        <DialogFooter>
+                          <Button type="submit" disabled={processingBuyInRef.current || !amount.trim()}>
+                            {processingBuyIn ? 'Sending...' : 'Submit'}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* History button */}
+                  <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
+                    <HistoryDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="group relative w-full h-10 text-sm font-semibold rounded-xl overflow-hidden bg-gradient-to-br from-slate-700/90 to-slate-800/90 hover:from-slate-600/90 hover:to-slate-700/90 text-white shadow-lg hover:shadow-xl backdrop-blur-sm border border-slate-500/30 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                        <span role="img" aria-label="history" className="text-lg drop-shadow-sm">📜</span>
+                        <span className="drop-shadow-sm">History</span>
+                      </Button>
+                    </HistoryDialogTrigger>
+                    <HistoryDialogContent
+                      className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
+                      style={{ minWidth: 350, maxWidth: 600 }}
+                    >
+                      <HistoryDialogHeader>
+                        <HistoryDialogTitle>Buy-in History</HistoryDialogTitle>
+                      </HistoryDialogHeader>
+                      <div style={{
+                        fontSize: '11px',
+                        overflowX: 'auto',
+                        overflowY: 'auto',
+                        maxHeight: '60vh'
+                      }}>
+                        <UITable>
                           <TableHeader>
-                            <TableRow className="border-b-white/20">
-                              <TableHead className="text-white" style={{
-                                minWidth: '70px', // reduced from 100px
-                                padding: '4px',
-                                fontSize: '11px',
-                                whiteSpace: 'nowrap',
-                              }}>Player</TableHead>
-                              <TableHead className="text-white" style={{
-                                minWidth: '60px', // reduced from 80px
-                                padding: '4px',
-                                textAlign: 'center',
-                                fontSize: '11px',
-                                whiteSpace: 'nowrap',
-                              }}>Total Buy-ins</TableHead>
-                              <TableHead className="text-white" style={{
-                                minWidth: '90px', // reduced from 140px
-                                padding: '4px',
-                                textAlign: 'center',
-                                fontSize: '11px'
-                              }}>End Up</TableHead>
-                              {/* NEW COLUMN */}
-                              <TableHead className="text-white" style={{
-                                minWidth: '120px',
-                                padding: '4px',
-                                textAlign: 'center',
-                                fontSize: '11px'
-                              }}>Total Profit / 7</TableHead>
+                            <TableRow>
+                              <TableHead style={{ minWidth: 60, padding: '2px 4px' }}>Player</TableHead>
+                              {(() => {
+                                const playerBuyIns = players.map((p: any) =>
+                                  historyData.filter((row: any) => row.player_id === p.id)
+                                );
+                                const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
+                                return Array.from({ length: maxBuyIns }).map((_, idx) => (
+                                  <TableHead key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
+                                    {idx + 1}
+                                  </TableHead>
+                                ));
+                              })()}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {Array.isArray(players) && players.map((p: any) => {
-                              const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                              const endUp = endUpValues[p.id] ?? 0;
-                              const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
+                            {players.map((p: any) => {
+                              const buyIns = historyData
+                                .filter((row: any) => row.player_id === p.id)
+                                .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
                               return (
-                                <TableRow
-                                  key={p.id}
-                                  className="border-b-white/10"
-                                  style={{ minHeight: 28 }}
-                                >
-                                  <TableCell style={{
-                                    padding: '4px 8px',
-                                    fontSize: '12px',
-                                    height: 28,
-                                    verticalAlign: 'middle',
-                                    minWidth: '70px', // reduced from 100px
-                                  }}>{p.name}</TableCell>
-                                  <TableCell style={{
-                                    padding: '4px 8px',
-                                    textAlign: 'center',
-                                    fontSize: '12px',
-                                    height: 28,
-                                    verticalAlign: 'middle',
-                                    minWidth: '60px' // reduced from 80px
-                                  }}>
-                                    {totalBuyIns}
-                                  </TableCell>
-                                  <TableCell style={{
-                                    padding: '4px 8px',
-                                    textAlign: 'center',
-                                    fontSize: '12px',
-                                    height: 28,
-                                    verticalAlign: 'middle',
-                                    minWidth: '90px' // reduced from 140px
-                                  }}>
-                                    <Input
-                                      type="number"
-                                      step="any" // allow decimal input
-                                      disabled={!isAdmin} // read-only for regular players
-                                      className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
-                                      style={{
-                                        width: 90,
-                                        height: 28,
-                                        fontSize: '12px',
-                                        padding: '4px 6px',
-                                        textAlign: 'center',
-                                        lineHeight: '24px'
-                                      }}
-                                      value={endUp}
-                                      onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
-                                    />
-                                  </TableCell>
-                                  {/* NEW COLUMN */}
-                                  <TableCell style={{
-                                    padding: '4px 8px',
-                                    textAlign: 'center',
-                                    fontSize: '12px',
-                                    height: 28,
-                                    verticalAlign: 'middle'
-                                  }}>
-                                    {profitDiv7}
-                                  </TableCell>
+                                <TableRow key={p.id}>
+                                  <TableCell style={{ minWidth: 60, padding: '2px 4px' }}>{p.name}</TableCell>
+                                  {buyIns.map((row: any, idx: number) => (
+                                    <TableCell key={idx} style={{ minWidth: 40, padding: '2px 4px', textAlign: 'center' }}>
+                                      {parseInt(row.amount, 10)}
+                                    </TableCell>
+                                  ))}
+                                  {Array.from({ length: Math.max(0, (() => {
+                                    const playerBuyIns = players.map((pl: any) =>
+                                      historyData.filter((row: any) => row.player_id === pl.id)
+                                    );
+                                    const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
+                                    return maxBuyIns - buyIns.length;
+                                  })()) }).map((_, idx) => (
+                                    <TableCell key={`empty-${idx}`} style={{ minWidth: 40, padding: '2px 4px' }}></TableCell>
+                                  ))}
                                 </TableRow>
                               );
                             })}
-                            {/* Totals row */}
-                            <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
-                              <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle', minWidth: '70px' }}>Total</TableCell>
-                              <TableCell style={{
-                                textAlign: 'center',
-                                fontSize: '12px',
-                                padding: '4px 8px',
-                                height: 28,
-                                verticalAlign: 'middle',
-                                minWidth: '60px'
-                              }}>
-                                {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
-                              </TableCell>
-                              <TableCell style={{
-                                textAlign: 'center',
-                                fontSize: '12px',
-                                padding: '4px 8px',
-                                height: 28,
-                                verticalAlign: 'middle'
-                              }}>
-                                {Object.values(endUpValues).reduce((sum, v) => sum + parseFloat(String(v)), 0)}
-                              </TableCell>
-                              <TableCell style={{
-                                textAlign: 'center',
-                                fontSize: '12px',
-                                padding: '4px 8px',
-                                height: 28,
-                                verticalAlign: 'middle'
-                              }}>
-                                {
-                                  players.length > 0
-                                    ? players.reduce((sum: number, p: any) => {
-                                        const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                                        const endUp = endUpValues[p.id] ?? 0;
-                                                                               return sum + (endUp - totalBuyIns) / 7;
-                                      }, 0).toFixed(2)
-                                    : '0.00'
-                                }
-                              </TableCell>
-                            </TableRow>
                           </TableBody>
                         </UITable>
                       </div>
+                      <HistoryDialogFooter>
+                        <Button variant="secondary" onClick={() => setOpenHistory(false)}>Close</Button>
+                      </HistoryDialogFooter>
+                    </HistoryDialogContent>
+                  </HistoryDialog>
+                </div>
+
+                {/* Secondary Action Buttons Row */}
+                <div className="grid grid-cols-3 gap-2">
+                  {/* End Up button */}
+                  {(() => {
+                    // show End Up button to everyone (admin edits, regular users read-only)
+                    if (!isAdmin) {
+                      console.log('[PokerTable.UI] End Up visible (read-only) for regular player', { profileId: profile?.id });
+                    } else {
+                      console.log('[PokerTable.UI] End Up visible (editable) for admin', { profileId: profile?.id });
+                    }
+                    return true;
+                  })() && (
+                    <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="group relative w-full h-8 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-amber-600/80 to-yellow-700/80 hover:from-amber-500/80 hover:to-yellow-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-amber-400/20 transition-all duration-300 transform hover:scale-[1.02]"
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          <span role="img" aria-label="end-up" className="text-xs drop-shadow-sm">🏁</span>
+                          <span className="drop-shadow-sm">End Up</span>
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent
+                        className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white"
+                        style={{
+                          display: 'inline-block',
+                          padding: '4px',
+                          minHeight: '550px',
+                          maxHeight: '90vh'
+                        }}
+                      >
+                        <DialogHeader>
+                          <DialogTitle>End Up Game</DialogTitle>
+                        </DialogHeader>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            height: '450px',
+                            maxHeight: '70vh',
+                            overflowX: 'auto',
+                            overflowY: 'auto',
+                            padding: '0'
+                          }}
+                        >
+                          <UITable style={{ width: 'auto', height: '100%' }}>
+                            <TableHeader>
+                              <TableRow className="border-b-white/20">
+                                <TableHead className="text-white" style={{
+                                  minWidth: '70px', // reduced from 100px
+                                  padding: '4px',
+                                  fontSize: '11px',
+                                  whiteSpace: 'nowrap',
+                                }}>Player</TableHead>
+                                <TableHead className="text-white" style={{
+                                  minWidth: '60px', // reduced from 80px
+                                  padding: '4px',
+                                  textAlign: 'center',
+                                  fontSize: '11px',
+                                  whiteSpace: 'nowrap',
+                                }}>Total Buy-ins</TableHead>
+                                <TableHead className="text-white" style={{
+                                  minWidth: '90px', // reduced from 140px
+                                  padding: '4px',
+                                  textAlign: 'center',
+                                  fontSize: '11px'
+                                }}>End Up</TableHead>
+                                {/* NEW COLUMN */}
+                                <TableHead className="text-white" style={{
+                                  minWidth: '120px',
+                                  padding: '4px',
+                                  textAlign: 'center',
+                                  fontSize: '11px'
+                                }}>Total Profit / 7</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {Array.isArray(players) && players.map((p: any) => {
+                                const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                                const endUp = endUpValues[p.id] ?? 0;
+                                const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
+                                return (
+                                  <TableRow
+                                    key={p.id}
+                                    className="border-b-white/10"
+                                    style={{ minHeight: 28 }}
+                                  >
+                                    <TableCell style={{
+                                      padding: '4px 8px',
+                                      fontSize: '12px',
+                                      height: 28,
+                                      verticalAlign: 'middle',
+                                      minWidth: '70px', // reduced from 100px
+                                    }}>{p.name}</TableCell>
+                                    <TableCell style={{
+                                      padding: '4px 8px',
+                                      textAlign: 'center',
+                                      fontSize: '12px',
+                                      height: 28,
+                                      verticalAlign: 'middle',
+                                      minWidth: '60px' // reduced from 80px
+                                    }}>
+                                      {totalBuyIns}
+                                    </TableCell>
+                                    <TableCell style={{
+                                      padding: '4px 8px',
+                                      textAlign: 'center',
+                                      fontSize: '12px',
+                                      height: 28,
+                                      verticalAlign: 'middle',
+                                      minWidth: '90px' // reduced from 140px
+                                    }}>
+                                      <Input
+                                        type="number"
+                                        step="any" // allow decimal input
+                                        disabled={!isAdmin} // read-only for regular players
+                                        className="bg-white/10 border-white/30 text-white placeholder-gray-400 focus:ring-white/50"
+                                        style={{
+                                          width: 90,
+                                          height: 28,
+                                          fontSize: '12px',
+                                          padding: '4px 6px',
+                                          textAlign: 'center',
+                                          lineHeight: '24px'
+                                        }}
+                                        value={endUp}
+                                        onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
+                                      />
+                                    </TableCell>
+                                    {/* NEW COLUMN */}
+                                    <TableCell style={{
+                                      padding: '4px 8px',
+                                      textAlign: 'center',
+                                      fontSize: '12px',
+                                      height: 28,
+                                      verticalAlign: 'middle'
+                                    }}>
+                                      {profitDiv7}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                              {/* Totals row */}
+                              <TableRow className="font-bold border-t border-t-white/20 bg-white/5" style={{ minHeight: 28 }}>
+                                <TableCell style={{ fontSize: '12px', padding: '4px 8px', height: 28, verticalAlign: 'middle', minWidth: '70px' }}>Total</TableCell>
+                                <TableCell style={{
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  padding: '4px 8px',
+                                  height: 28,
+                                  verticalAlign: 'middle',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     minWidth: '60px'
+                                }}>
+                                  {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                                </TableCell>
+                                <TableCell style={{
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  padding: '4px 8px',
+                                  height: 28,
+                                  verticalAlign: 'middle'
+                                }}>
+                                  {Object.values(endUpValues).reduce((sum, v) => sum + parseFloat(String(v)), 0)}
+                                </TableCell>
+                                <TableCell style={{
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  padding: '4px 8px',
+                                  height: 28,
+                                  verticalAlign: 'middle'
+                                }}>
+                                  {
+                                    players.length > 0
+                                      ? players.reduce((sum: number, p: any) => {
+                                          const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
+                                          const endUp = endUpValues[p.id] ?? 0;
+                                                                               return sum + (endUp - totalBuyIns) / 7;
+                                      }, 0).toFixed(2)
+                                      : '0.00'
+                                  }
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </UITable>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
+
+                          {/* Admin-only Save button persists via broadcast so everyone receives values */}
+                          {isAdmin && (
+                            <Button onClick={handleSaveEndUp} className="ml-2">
+                              Save End Up
+                            </Button>
+                          )}
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+
+                  {/* Edit Profile button */}
+                  <Button
+                    variant="outline"
+                    className="group relative w-full h-8 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-blue-600/80 to-indigo-700/80 hover:from-blue-500/80 hover:to-indigo-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-blue-400/20 transition-all duration-300 transform hover:scale-[1.02]"
+                    onClick={() => {
+                      setEditName(profile?.name || '');
+                      setEditError('');
+                      setOpenEditProfile(true);
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    <span role="img" aria-label="edit" className="text-xs drop-shadow-sm">✏️</span>
+                    <span className="drop-shadow-sm">Edit Profile</span>
+                  </Button>
+
+                  {/* Exit Table button */}
+                  <Dialog open={openExit} onOpenChange={setOpenExit}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="group relative w-full h-8 text-xs font-medium rounded-lg overflow-hidden bg-gradient-to-br from-rose-600/80 to-red-700/80 hover:from-rose-500/80 hover:to-red-600/80 text-white shadow-md hover:shadow-lg backdrop-blur-sm border border-rose-400/20 transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 disabled:opacity-50"
+                        disabled={processingExit}
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                        <span role="img" aria-label="exit" className="text-xs drop-shadow-sm">🚪</span>
+                        <span className="drop-shadow-sm">Exit Table</span>
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+                      <DialogHeader>
+                        <DialogTitle>Exit Game</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-2 text-sm">
+                        <p>You will be moved to the table selection page.</p>
+                        <p className="text-gray-300 text-sm">Click Yes to continue.</p>
+                      </div>
                       <DialogFooter>
-                        <Button variant="secondary" onClick={() => setOpenEndUp(false)}>Close</Button>
-                        {/* Admin-only Save button persists via broadcast so everyone receives values */}
-                        {isAdmin && (
-                          <Button onClick={handleSaveEndUp} className="ml-2">
-                            Save End Up
-                          </Button>
-                        )}
+                        <Button
+                          variant="secondary"
+                          onClick={() => setOpenExit(false)}
+                          disabled={processingExit}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={async () => {
+                            setOpenExit(false);
+                            await handleExitGame();
+                          }}
+                          disabled={processingExit}
+                        >
+                          Yes, Exit Table
+                        </Button>
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
-                )}
-                {/* Edit Profile button - placed immediately after End Up button */}
-                <Button
-                  variant="outline"
-                  className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-gray-700 hover:bg-gray-800 text-white border-none flex items-center gap-1 transition-all"
-                  onClick={() => {
-                    setEditName(profile?.name || '');
-                    setEditError('');
-                    setOpenEditProfile(true);
-                  }}
-                >
-                  <span role="img" aria-label="edit">✏️</span>
-                  Edit Profile
-                </Button>
-
-                {/* Exit Game button - moved from bottom to button group */}
-                <Dialog open={openExit} onOpenChange={setOpenExit}>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="px-2 py-1 min-w-[70px] text-[13px] rounded shadow-sm bg-red-600 hover:bg-red-700 text-white border-none flex items-center gap-1 transition-all"
-                      disabled={processingExit}
-                    >
-                      <span role="img" aria-label="exit">🚪</span>
-                      Exit Table
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
-                    <DialogHeader>
-                      <DialogTitle>Exit Game</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-2 text-sm">
-                      <p>You will be moved to the table selection page.</p>
-                      <p className="text-gray-300 text-sm">Click Yes to continue.</p>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        variant="secondary"
-                        onClick={() => setOpenExit(false)}
-                        disabled={processingExit}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={async () => {
-                          setOpenExit(false);
-                          await handleExitGame();
-                        }}
-                        disabled={processingExit}
-                      >
-                        Yes, Exit Table
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                </div>
               </div>
               {/* Admin notification and approval UI */}
               {isAdmin && pendingRequests.length > 0 && (
@@ -1959,7 +1972,7 @@ return (
                 </Card>
               )}
               {/* Player totals table */}
-              <Card className="mb-3 bg-gray-900/50 border-gray-700">
+              <Card className="mb-2 bg-gray-900/50 border-gray-700">
                 <CardHeader className="p-2">
                   <CardTitle className="text-white text-sm">Total Buy-ins</CardTitle>
                   <CardDescription className="text-gray-400 text-xs">
@@ -1967,13 +1980,15 @@ return (
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-2 pt-0">
-                  {/* Show only the current user's total buy-ins */}
-                  <div className="flex flex-col items-center justify-center py-1">
-                    <div className="text-xl font-bold text-white">
-                      {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
+                  {/* Show player name and total buy-ins with centered total */}
+                  <div className="flex items-center">
+                    <div className="text-sm text-gray-200 flex-shrink-0">
+                      {profile?.name}
                     </div>
-                    <div className="text-gray-200 text-xs">
-                      Player: {profile?.name}
+                    <div className="flex-1 flex justify-center">
+                      <div className="text-3xl font-bold text-white">
+                        {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -1981,7 +1996,7 @@ return (
             </>
           )}
 
-          <div className="mt-3" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+          <div className="mt-3" style={{ maxHeight: '450px', overflowY: 'auto' }}>
             <UITable>
               <TableHeader>
                 <TableRow className="border-b-green-400/30">
@@ -2008,7 +2023,7 @@ return (
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-white py-0.5 px-2 text-xs">
-                        {parseInt(String(p.totalPoints ?? 0), 10)}
+                        {parseInt(String(playerTotals[p.id] ?? 0), 10)}
                       </TableCell>
                     </TableRow>
                   );
