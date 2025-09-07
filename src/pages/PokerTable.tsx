@@ -1943,8 +1943,8 @@ return (
             <UITable>
               <TableHeader>
                 <TableRow className="border-b-green-400/30">
-                  <TableHead className="text-white py-2 px-3 text-sm">Player</TableHead>
-                  <TableHead className="text-right text-white py-2 px-3 text-sm">Total Buy-ins</TableHead>
+                  <TableHead className="text-white py-1 px-2 text-xs">Player</TableHead>
+                  <TableHead className="text-right text-white py-1 px-2 text-xs">Total Buy-ins</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1955,17 +1955,17 @@ return (
                   const isPending = !!p.pending;
                   const isInactive = !p.pending && p.active === false; // only treat as exited when not pending
                   return (
-                    <TableRow key={p.id} className={`border-b-green-400/20 ${isInactive ? 'opacity-50' : ''} h-8`}>
-                      <TableCell className="font-medium text-white py-1 px-3 text-sm">
+                    <TableRow key={p.id} className={`border-b-green-400/20 ${isInactive ? 'opacity-50' : ''} h-6`}>
+                      <TableCell className="font-medium text-white py-0.5 px-2 text-xs">
                         {p.name}
                         {isPending && (
-                          <span style={{ color: '#fcd34d', marginLeft: 6, fontSize: 11 }}>(Pending)</span>
+                          <span style={{ color: '#fcd34d', marginLeft: 4, fontSize: 10 }}>(Pending)</span>
                         )}
                         {isInactive && (
-                          <span style={{ color: '#ef4444', marginLeft: 6, fontSize: 11 }}>(Exited)</span>
+                          <span style={{ color: '#ef4444', marginLeft: 4, fontSize: 10 }}>(Exited)</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-white py-1 px-3 text-sm">
+                      <TableCell className="text-right font-mono text-white py-0.5 px-2 text-xs">
                         {parseInt(String(p.totalPoints ?? 0), 10)}
                       </TableCell>
                     </TableRow>
