@@ -2,14 +2,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { storage } from '@/utils/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { Player, PokerTable } from '@/integrations/supabase/types';
-import { useNavigate } from 'react-router-dom';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 // Update types to match new simplified schema
 type TablePlayer = {
@@ -230,13 +230,13 @@ const TableSelection = ({
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-center bg-cover"
+      className="min-h-screen flex flex-col items-center justify-start p-4 pt-16 relative overflow-hidden bg-center bg-cover"
       style={{ backgroundImage: "url('/Poker_05.png')" }}
     >
       {/* Overlay to darken the background image */}
       <div className="absolute inset-0 bg-black/40"></div>
 
-      <div className="space-y-6 w-full max-w-sm relative z-10">
+      <div className="space-y-6 w-full max-w-sm relative z-10 flex-shrink-0">
         <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
           <CardHeader className="p-4">
             <CardTitle className="text-white text-center text-xl">Join a Poker Table</CardTitle>
@@ -309,42 +309,43 @@ const TableSelection = ({
             </CardContent>
           </Card>
         )}
-      </div>
 
-      {/* Button to go back to profile creation */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-        <Dialog open={openSwitchPlayerDialog} onOpenChange={setOpenSwitchPlayerDialog}>
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              className="text-white/70 hover:text-white hover:bg-white/10 text-sm"
-            >
-              Back to Profile Creation
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
-            <DialogHeader>
-              <DialogTitle>Are you sure?</DialogTitle>
-              <DialogDescription className="text-gray-300 pt-2">
-                This will clear your current player session from this browser. You will be treated as a new player and will need to create a new profile if your original name is already taken.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="secondary" onClick={() => setOpenSwitchPlayerDialog(false)}>
-                Cancel
-              </Button>
+        {/* Moved cache clear button here - below the cards but still visible */}
+        <div className="flex justify-center mt-8">
+          <Dialog open={openSwitchPlayerDialog} onOpenChange={setOpenSwitchPlayerDialog}>
+            <DialogTrigger asChild>
               <Button
-                variant="destructive"
-                onClick={() => {
-                  setOpenSwitchPlayerDialog(false);
-                  handleSwitchPlayer();
-                }}
+                variant="ghost"
+                size="sm"
+                className="text-white/70 hover:text-white hover:bg-white/20 text-xs px-3 py-2 border border-white/20 backdrop-blur-sm bg-black/20 rounded-md"
               >
-                Continue
+                Clear Cache & Reset Profile
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+              <DialogHeader>
+                <DialogTitle>Clear Cache & Reset Profile</DialogTitle>
+                <DialogDescription className="text-gray-300 pt-2">
+                  This will clear your current player session from this browser. You will be treated as a new player and will need to create a new profile if your original name is already taken.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="secondary" onClick={() => setOpenSwitchPlayerDialog(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setOpenSwitchPlayerDialog(false);
+                    handleSwitchPlayer();
+                  }}
+                >
+                  Clear & Reset
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
     </div>
   );
