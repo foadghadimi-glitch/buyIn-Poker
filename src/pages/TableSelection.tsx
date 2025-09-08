@@ -230,27 +230,27 @@ const TableSelection = ({
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-start p-4 pt-16 relative overflow-hidden bg-center bg-cover"
+      className="min-h-screen flex flex-col items-center justify-start p-3 pt-8 relative overflow-hidden bg-center bg-cover"
       style={{ backgroundImage: "url('/Poker_05.png')" }}
     >
       {/* Overlay to darken the background image */}
-      <div className="absolute inset-0 bg-black/40"></div>
+      <div className="absolute inset-0 bg-black/50"></div>
 
-      <div className="space-y-6 w-full max-w-sm relative z-10 flex-shrink-0">
+      <div className="space-y-4 w-full max-w-sm relative z-10 flex-shrink-0">
         <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
           <CardHeader className="p-4">
-            <CardTitle className="text-white text-center text-xl">Join a Poker Table</CardTitle>
+            <CardTitle className="text-white text-center text-lg">Join a Poker Table</CardTitle>
           </CardHeader>
           <form onSubmit={(e) => { e.preventDefault(); handleJoin(); }}>
             <CardContent className="p-4 pt-0">
               <div className="space-y-2">
-                <Label htmlFor="joinCode" className="text-base font-semibold text-gray-200">Join Code</Label>
+                <Label htmlFor="joinCode" className="text-sm font-semibold text-gray-200">Enter Table Code</Label>
                 <Input
                   id="joinCode"
                   placeholder="1234"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
-                  className="h-10 text-base border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-mono"
+                  className="h-9 text-base border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-100 text-center font-mono rounded-lg shadow-inner"
                 />
               </div>
             </CardContent>
@@ -258,7 +258,7 @@ const TableSelection = ({
               <Button
                 type="submit"
                 disabled={isJoining || waitingApproval}
-                className="w-full h-11 text-base font-bold bg-blue-600 hover:bg-blue-700 text-white"
+                className="w-full h-10 text-sm font-bold bg-[#fbc02d] hover:bg-[#f9a825] active:bg-[#f57f17] text-black transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
               >
                 {isJoining ? 'Joining...' : 'Join Table'}
               </Button>
@@ -268,18 +268,18 @@ const TableSelection = ({
 
         <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
           <CardHeader className="p-4">
-            <CardTitle className="text-white text-center text-xl">Create a New Poker Table</CardTitle>
+            <CardTitle className="text-white text-center text-lg">Create a New Poker Table</CardTitle>
           </CardHeader>
           <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
             <CardContent className="p-4 pt-0">
               <div className="space-y-2">
-                <Label htmlFor="tableName" className="text-base font-semibold text-gray-200">Table Name</Label>
+                <Label htmlFor="tableName" className="text-sm font-semibold text-gray-200">Name Your Table</Label>
                 <Input
                   id="tableName"
                   placeholder="e.g., Friday Night Poker"
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
-                  className="h-10 text-base border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
+                  className="h-9 text-base border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-100 text-center font-medium rounded-lg shadow-inner"
                 />
               </div>
             </CardContent>
@@ -287,7 +287,7 @@ const TableSelection = ({
               <Button
                 type="submit"
                 disabled={isCreating}
-                className="w-full h-11 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
+                className="w-full h-10 text-sm font-bold bg-[#2e7d32] hover:bg-[#388e3c] active:bg-[#1b5e20] text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
               >
                 {isCreating ? 'Creating...' : 'Create Table'}
               </Button>
@@ -310,8 +310,8 @@ const TableSelection = ({
           </Card>
         )}
 
-        {/* Moved cache clear button here - below the cards but still visible */}
-        <div className="flex justify-center mt-8">
+        {/* Moved cache clear button here - below the cards with extra spacing */}
+        <div className="flex justify-center mt-12 pt-8">
           <Dialog open={openSwitchPlayerDialog} onOpenChange={setOpenSwitchPlayerDialog}>
             <DialogTrigger asChild>
               <Button
