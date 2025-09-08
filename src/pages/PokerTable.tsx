@@ -1372,14 +1372,18 @@ const fetchEndUpValues = async (tableId?: string) => {
   const id = tableId || table?.id;
   if (!id) return;
   try {
-    const { data, error } = await supabase
+    // Try to fetch from end_ups table
+    const { data, error } = await (supabase as any)
       .from('end_ups')
       .select('player_id, value')
       .eq('table_id', id);
+    
     if (error) {
-      console.warn('[PokerTable][fetchEndUpValues] failed', error);
+      // If table doesn't exist or other error, log and continue without end-up values
+      console.warn('[PokerTable][fetchEndUpValues] end_ups not available or error:', error);
       return;
     }
+    
     const map: Record<string, number> = {};
     (data || []).forEach((r: any) => {
       if (!r || !r.player_id) return;
@@ -1388,7 +1392,8 @@ const fetchEndUpValues = async (tableId?: string) => {
     setEndUpValues(map);
     console.log('[PokerTable][fetchEndUpValues] loaded', { tableId: id, count: Object.keys(map).length });
   } catch (e) {
-    console.error('[PokerTable][fetchEndUpValues] exception', e);
+    console.warn('[PokerTable][fetchEndUpValues] exception - table may not exist yet:', e);
+    // Continue without end-up values if table doesn't exist
   }
 };
 
@@ -1405,20 +1410,29 @@ const handleSaveEndUp = async () => {
     }));
 
     if (rows.length > 0) {
-      // Upsert using composite unique on (table_id, player_id)
-      const { error } = await supabase
-        .from('end_ups')
-        .upsert(rows, { onConflict: 'table_id,player_id' });
-      if (error) {
-        console.error('[PokerTable] handleSaveEndUp upsert failed', error);
-        toast.error('Failed to save end-up values.');
+      // Try to upsert, but handle if table doesn't exist
+      try {
+        const { error } = await (supabase as any)
+          .from('end_ups')
+          .upsert(rows, { onConflict: 'table_id,player_id' });
+        if (error) {
+          console.warn('[PokerTable] handleSaveEndUp - end_ups may not exist:', error);
+          toast.error('End-up values feature not available yet.');
+          return;
+        }
+      } catch (e) {
+        console.warn('[PokerTable] handleSaveEndUp - end_ups table not found:', e);
+        toast.error('End-up values feature not available yet.');
         return;
       }
     } else {
-      // If admin cleared all values locally, delete persisted rows for this table
+      // If admin cleared all values locally, try to delete persisted rows for this table
       try {
-        await supabase.from('end_ups').delete().eq('table_id', table.id);
-      } catch (e) { /* ignore */ }
+        await (supabase as any).from('end_ups').delete().eq('table_id', table.id);
+      } catch (e) { 
+        console.warn('[PokerTable] handleSaveEndUp delete - table may not exist:', e);
+        // ignore if table doesn't exist
+      }
     }
 
     // Broadcast so other clients update quickly (they listen for end_up_updated)
@@ -1483,32 +1497,32 @@ return (
   <div 
     className="min-h-[100dvh] h-[100dvh] flex flex-col bg-[#0b0f10] text-slate-100 relative"
     style={showBackground ? {
-      backgroundImage: `url('/images/poker-bg.jpg')`,
+      backgroundImage: `url('/Poker_05.png'), linear-gradient(135deg, #0f4c3a 0%, #2d5016 50%, #0f4c3a 100%)`,
       backgroundSize: 'cover',
-      backgroundPosition: 'center'
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
     } : undefined}
   >
-    {/* Dark overlay for background image */}
+    {/* Dark overlay for background image - semi-transparent */}
     {showBackground && (
-      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm pointer-events-none" />
+      <div className="absolute inset-0 bg-black/40 pointer-events-none" style={{ zIndex: 1 }} />
     )}
     
-    {/* Main content - relative positioning to be above overlay */}
-    <div className="relative z-10 h-full flex flex-col pt-safe pb-safe px-3">
+    {/* Main content - positioned above overlay */}
+    <div className="relative h-full flex flex-col pt-safe pb-safe px-3" style={{ zIndex: 10 }}>
       {/* Zone 1: Header + Actions (auto height, compact) */}
       <div className="flex-shrink-0 space-y-3">
         {/* Header */}
-        <div className="rounded-2xl border border-emerald-700/25 bg-black/30 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-lg font-semibold tracking-tight text-white truncate">
+        <div className="rounded-2xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-4">
+          <div className="flex flex-col gap-3">
+            <h1 className="text-xl font-bold tracking-tight text-white truncate text-center">
               {table.name || normalizedJoinCode}
             </h1>
-            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-              <div className="text-xs text-slate-300">Join Code</div>
+            <div className="flex items-center justify-between gap-4">
               <div className="relative">
                 <button
                   onClick={handleCopyJoinCode}
-                  className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 shadow-sm"
                   title="Copy join code"
                   aria-label={`Copy join code: ${normalizedJoinCode}`}
                 >
@@ -1516,12 +1530,12 @@ return (
                   <Copy className="w-3.5 h-3.5" />
                 </button>
                 {copied && (
-                  <div role="status" className="absolute -top-8 right-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md shadow-lg">
+                  <div role="status" className="absolute -bottom-9 left-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md shadow-lg z-20">
                     Copied!
                   </div>
                 )}
               </div>
-              <div className="text-xs text-slate-200 text-right mt-1">
+              <div className="text-xs text-slate-300 text-right">
                 Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
               </div>
             </div>
@@ -1551,14 +1565,14 @@ return (
 
         {/* Player Actions */}
         {isPlayerOnTable && (
-          <div className="rounded-2xl border border-emerald-700/25 bg-black/30 p-3">
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-4">
             <h3 className="text-sm font-medium text-slate-200 mb-3">Actions</h3>
             
             {/* Primary Buy-in Button */}
             <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
               <DialogTrigger asChild>
                 <button 
-                  className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                   aria-label="Request buy-in from table admin"
                 >
                   <Banknote className="w-5 h-5" aria-hidden="true" />
@@ -1609,7 +1623,7 @@ return (
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
                   <button 
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label="View buy-in history"
                   >
                     <ScrollText className="w-4 h-4" aria-hidden="true" />
@@ -1675,7 +1689,7 @@ return (
               <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                 <DialogTrigger asChild>
                   <button 
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label="View end game calculations"
                   >
                     <Flag className="w-4 h-4" aria-hidden="true" />
@@ -1709,22 +1723,18 @@ return (
                       <TableHeader>
                         <TableRow className="border-b border-gray-600/40">
                           <TableHead className="text-slate-200 font-semibold text-sm" style={{
-                            minWidth: '90px',
-                            padding: '8px',
+                            padding: '8px 4px',
                             whiteSpace: 'nowrap'
                           }}>Player</TableHead>
                           <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                            minWidth: '80px',
-                            padding: '8px',
+                            padding: '8px 4px',
                             whiteSpace: 'nowrap'
                           }}>Buy-ins</TableHead>
                           <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                            minWidth: '90px',
-                            padding: '8px'
+                            padding: '8px 4px'
                           }}>End Up</TableHead>
                           <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                            minWidth: '80px',
-                            padding: '8px'
+                            padding: '8px 4px'
                           }}>Profit/7</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1740,28 +1750,25 @@ return (
                               style={{ minHeight: 40 }}
                             >
                               <TableCell className="text-white font-medium text-sm truncate" style={{
-                                padding: '8px',
+                                padding: '8px 4px',
                                 height: 40,
                                 verticalAlign: 'middle',
-                                minWidth: '90px',
                                 maxWidth: '90px',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
                               }}>{p.name}</TableCell>
                               <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                                padding: '8px',
+                                padding: '8px 4px',
                                 height: 40,
                                 verticalAlign: 'middle',
-                                minWidth: '80px'
                               }}>
                                 {totalBuyIns}
                               </TableCell>
                               <TableCell style={{
-                                padding: '8px',
+                                padding: '8px 4px',
                                 textAlign: 'right',
                                 height: 40,
                                 verticalAlign: 'middle',
-                                minWidth: '90px'
                               }}>
                                 <Input
                                   type="number"
@@ -1769,7 +1776,7 @@ return (
                                   disabled={!isAdmin}
                                   className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm font-mono text-right"
                                   style={{
-                                    width: 85,
+                                    width: '100%',
                                     height: 32,
                                     fontSize: '14px',
                                     padding: '4px 8px'
@@ -1779,10 +1786,9 @@ return (
                                 />
                               </TableCell>
                               <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                                padding: '8px',
+                                padding: '8px 4px',
                                 height: 40,
                                 verticalAlign: 'middle',
-                                minWidth: '80px'
                               }}>
                                 {profitDiv7}
                               </TableCell>
@@ -1792,7 +1798,7 @@ return (
                       </TableBody>
                     </UITable>
                   </div>
-                  <DialogFooter>
+                                   <DialogFooter>
                     <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
                     {isAdmin && (
                       <Button onClick={handleSaveEndUp} className="ml-2 bg-green-600 hover:bg-green-700 text-white font-semibold">
@@ -1807,7 +1813,7 @@ return (
               <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                 <DialogTrigger asChild>
                   <button
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     onClick={() => {
                       setEditName(profile?.name || '');
                       setEditError('');
@@ -1984,7 +1990,7 @@ return (
       {/* Zone 2: Summary Row (auto height, compact) */}
       {isPlayerOnTable && (
         <div className="flex-shrink-0 my-3">
-          <div className="rounded-2xl border border-emerald-700/25 bg-black/30 p-3 flex items-center justify-between">
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-4 flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <div className="text-sm text-slate-300">Your Buy-ins</div>
               <div className="text-4xl md:text-5xl font-extrabold text-emerald-300 font-mono tabular-nums">
@@ -2047,11 +2053,6 @@ return (
                     <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
                       {total}
                     </div>
-                    {total !== 0 && (
-                      <div className="text-xs text-slate-400 tabular-nums">
-                        ${total}
-                      </div>
-                    )}
                   </div>
                 </div>
               );
@@ -2122,11 +2123,6 @@ return (
                           <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
                             {total}
                           </div>
-                          {total !== 0 && (
-                            <div className="text-xs text-slate-300 tabular-nums">
-                              ${total}
-                            </div>
-                          )}
                         </div>
                       </div>
                     );
@@ -2224,22 +2220,18 @@ return (
               <TableHeader>
                 <TableRow className="border-b border-gray-600/40">
                   <TableHead className="text-slate-200 font-semibold text-sm" style={{
-                    minWidth: '90px',
-                    padding: '8px',
+                    padding: '8px 4px',
                     whiteSpace: 'nowrap'
                   }}>Player</TableHead>
                   <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                    minWidth: '80px',
-                    padding: '8px',
+                    padding: '8px 4px',
                     whiteSpace: 'nowrap'
                   }}>Buy-ins</TableHead>
                   <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                    minWidth: '90px',
-                    padding: '8px'
+                    padding: '8px 4px'
                   }}>End Up</TableHead>
                   <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                    minWidth: '80px',
-                    padding: '8px'
+                    padding: '8px 4px'
                   }}>Profit/7</TableHead>
                 </TableRow>
               </TableHeader>
@@ -2255,28 +2247,25 @@ return (
                       style={{ minHeight: 40 }}
                     >
                       <TableCell className="text-white font-medium text-sm truncate" style={{
-                        padding: '8px',
+                        padding: '8px 4px',
                         height: 40,
                         verticalAlign: 'middle',
-                        minWidth: '90px',
                         maxWidth: '90px',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
                       }}>{p.name}</TableCell>
                       <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                        padding: '8px',
+                        padding: '8px 4px',
                         height: 40,
                         verticalAlign: 'middle',
-                        minWidth: '80px'
                       }}>
                         {totalBuyIns}
                       </TableCell>
                       <TableCell style={{
-                        padding: '8px',
+                        padding: '8px 4px',
                         textAlign: 'right',
                         height: 40,
                         verticalAlign: 'middle',
-                        minWidth: '90px'
                       }}>
                         <Input
                           type="number"
@@ -2284,7 +2273,7 @@ return (
                           disabled={!isAdmin}
                           className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm font-mono text-right"
                           style={{
-                            width: 85,
+                            width: '100%',
                             height: 32,
                             fontSize: '14px',
                             padding: '4px 8px'
@@ -2294,10 +2283,9 @@ return (
                         />
                       </TableCell>
                       <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                        padding: '8px',
+                        padding: '8px 4px',
                         height: 40,
                         verticalAlign: 'middle',
-                        minWidth: '80px'
                       }}>
                         {profitDiv7}
                       </TableCell>
