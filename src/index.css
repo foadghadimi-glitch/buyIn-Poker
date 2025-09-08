@@ -47,14 +47,19 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
 
-    /* Design tokens */
+    /* Enhanced design tokens */
     --brand: 258 90% 60%;
     --brand-2: 199 95% 48%;
+    --success: 120 84% 45%;
+    --warning: 46 87% 54%;
     --primary-glow: 258 90% 66%;
     --gradient-primary: linear-gradient(135deg, hsl(var(--brand) / 0.95), hsl(var(--brand-2) / 0.95));
     --gradient-surface: radial-gradient(60% 100% at 50% 0%, hsl(var(--brand) / 0.08) 0%, transparent 60%), radial-gradient(60% 100% at 100% 0%, hsl(var(--brand-2) / 0.08) 0%, transparent 60%);
+    --gradient-hero: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(var(--brand)) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
     --shadow-elegant: 0 10px 30px -10px hsl(var(--brand) / 0.3);
     --shadow-glow: 0 0 32px hsl(var(--brand) / 0.35);
+    --shadow-card: 0 4px 12px -2px hsl(var(--foreground) / 0.1);
     --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -62,10 +67,10 @@ All colors MUST be HSL.
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 225 27% 8%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 225 27% 8%;
     --popover-foreground: 210 40% 98%;
 
     --primary: 258 90% 66%;
@@ -94,6 +99,13 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Enhanced dark mode design tokens */
+    --success: 120 84% 55%;
+    --warning: 46 87% 64%;
+    --gradient-hero: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(var(--brand)) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
+    --shadow-card: 0 4px 12px -2px hsl(0 0% 0% / 0.25);
   }
 }
 
@@ -197,29 +209,46 @@ All colors MUST be HSL.
   }
 
   .btn-poker {
-    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 active:scale-95;
+    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-card;
   }
 
   .btn-poker.primary {
-    @apply bg-gradient-hero text-white shadow-elegant hover:shadow-lg;
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-elegant;
   }
 
   .btn-poker.secondary {
-    @apply bg-gradient-card text-gray-800 shadow-card hover:shadow-elegant;
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-card;
   }
 
   .btn-poker.success {
-    @apply bg-gradient-success text-white shadow-elegant hover:shadow-lg;
+    @apply bg-green-600 text-white hover:bg-green-700 shadow-elegant;
   }
 
   .btn-poker.warning {
-    @apply bg-gradient-warning text-white shadow-elegant hover:shadow-lg;
+    @apply bg-yellow-600 text-white hover:bg-yellow-700 shadow-elegant;
+  }
+
+  .btn-poker.hero {
+    background: var(--gradient-hero);
+    @apply text-white shadow-glow hover:shadow-elegant;
   }
 
   .glass-effect {
-    background: rgba(255, 255, 255, 0.1);
+    background: hsl(var(--card) / 0.1);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid hsl(var(--border) / 0.2);
+  }
+
+  .shadow-elegant {
+    box-shadow: var(--shadow-elegant);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
   }
 
   .text-glow {

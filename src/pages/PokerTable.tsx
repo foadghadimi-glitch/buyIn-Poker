@@ -5,11 +5,11 @@ import { storage } from '@/utils/storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table as UITable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { v4 as uuidv4 } from 'uuid';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogHeader as HistoryDialogHeader, DialogTitle as HistoryDialogTitle, DialogFooter as HistoryDialogFooter, DialogTrigger as HistoryDialogTrigger } from '@/components/ui/dialog';
+import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogDescription as HistoryDialogDescription, DialogHeader as HistoryDialogHeader, DialogTitle as HistoryDialogTitle, DialogFooter as HistoryDialogFooter, DialogTrigger as HistoryDialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Player, PokerTable as PokerTableType } from '@/integrations/supabase/types';
 import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
@@ -1579,9 +1579,12 @@ return (
                   Buy-in
                 </button>
               </DialogTrigger>
-              <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
+              <DialogContent className="bg-card/95 backdrop-blur-md border border-primary/20 text-card-foreground max-w-sm w-80">
                 <DialogHeader>
-                  <DialogTitle className="text-lg font-bold text-white">Request Buy-in</DialogTitle>
+                  <DialogTitle className="text-lg font-bold">Request Buy-in</DialogTitle>
+                  <DialogDescription className="text-muted-foreground">
+                    Enter the amount you would like to buy in for.
+                  </DialogDescription>
                 </DialogHeader>
                 <form
                   onSubmit={e => {
@@ -1600,16 +1603,16 @@ return (
                     inputMode="decimal"
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
-                    className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
+                    className="bg-input border-border text-foreground placeholder-muted-foreground focus:ring-ring/50 focus:border-primary text-base h-11"
                     autoFocus
                   />
                   <DialogFooter>
-                    <Button
-                      type="submit"
-                      disabled={processingBuyInRef.current || !amount.trim()}
-                      className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/60"
-                      aria-label="Submit buy-in request"
-                    >
+                      <Button
+                        type="submit"
+                        disabled={processingBuyInRef.current || !amount.trim()}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                        aria-label="Submit buy-in request"
+                      >
                       {processingBuyIn ? 'Sending...' : 'Submit'}
                     </Button>
                   </DialogFooter>
@@ -1631,11 +1634,14 @@ return (
                   </button>
                 </HistoryDialogTrigger>
                 <HistoryDialogContent
-                  className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+                  className="bg-card/95 backdrop-blur-md border border-primary/20 text-card-foreground max-w-md"
                   style={{ width: '400px', maxWidth: '90vw' }}
                 >
                   <HistoryDialogHeader>
-                    <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
+                    <HistoryDialogTitle className="text-lg font-bold">Buy-in History</HistoryDialogTitle>
+                    <HistoryDialogDescription className="text-muted-foreground">
+                      View all buy-ins for each player at this table.
+                    </HistoryDialogDescription>
                   </HistoryDialogHeader>
                   <div style={{
                     fontSize: '14px',
@@ -1680,7 +1686,7 @@ return (
                     </UITable>
                   </div>
                   <HistoryDialogFooter>
-                    <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
+                    <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-semibold">Close</Button>
                   </HistoryDialogFooter>
                 </HistoryDialogContent>
               </HistoryDialog>
@@ -1851,9 +1857,12 @@ return (
                     Edit Profile
                   </button>
                 </DialogTrigger>
-                <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
+                <DialogContent className="bg-card/95 backdrop-blur-md border border-primary/20 text-card-foreground max-w-sm w-80">
                   <DialogHeader>
-                    <DialogTitle className="text-lg font-bold text-white">Edit Profile</DialogTitle>
+                    <DialogTitle className="text-lg font-bold">Edit Profile</DialogTitle>
+                    <DialogDescription className="text-muted-foreground">
+                      Update your display name for this poker session.
+                    </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={(e) => {
                     e.preventDefault();
@@ -1865,7 +1874,7 @@ return (
                         id="editName"
                         value={editName}
                         onChange={handleEditNameChange}
-                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
+                        className="bg-input border-border text-foreground placeholder-muted-foreground focus:ring-ring/50 focus:border-primary text-base h-11"
                         maxLength={30}
                         autoFocus
                       />
@@ -1877,7 +1886,7 @@ return (
                       <Button
                         type="submit"
                         disabled={editSubmitting || !editName.trim()}
-                        className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/60"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                         aria-label="Save profile changes"
                       >
                         {editSubmitting ? 'Saving...' : 'Save'}
@@ -1899,9 +1908,12 @@ return (
                     Exit Table
                   </button>
                 </DialogTrigger>
-                <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
+                <DialogContent className="bg-card/95 backdrop-blur-md border border-destructive/20 text-card-foreground max-w-sm w-80">
                   <DialogHeader>
-                    <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
+                    <DialogTitle className="text-lg font-bold">Exit Game</DialogTitle>
+                    <DialogDescription className="text-muted-foreground">
+                      Are you sure you want to leave this poker table?
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3 text-sm">
                     <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
@@ -1912,7 +1924,7 @@ return (
                       variant="secondary"
                       onClick={() => setOpenExit(false)}
                       disabled={processingExit}
-                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      className="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-semibold"
                     >
                       Cancel
                     </Button>
@@ -1923,7 +1935,7 @@ return (
                         await handleExitGame();
                       }}
                       disabled={processingExit}
-                      className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                      className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-semibold"
                       aria-label="Confirm exit from poker table"
                     >
                       Yes, Exit Table
@@ -2163,11 +2175,14 @@ return (
       {/* History Dialog */}
       <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
         <HistoryDialogContent
-          className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+          className="bg-card/95 backdrop-blur-md border border-primary/20 text-card-foreground max-w-md"
           style={{ width: '400px', maxWidth: '90vw' }}
         >
           <HistoryDialogHeader>
-            <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
+            <HistoryDialogTitle className="text-lg font-bold">Buy-in History</HistoryDialogTitle>
+            <HistoryDialogDescription className="text-muted-foreground">
+              Complete buy-in history for all players at this table.
+            </HistoryDialogDescription>
           </HistoryDialogHeader>
           <div style={{
             fontSize: '14px',
@@ -2212,16 +2227,19 @@ return (
             </UITable>
           </div>
           <HistoryDialogFooter>
-            <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
+            <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-semibold">Close</Button>
           </HistoryDialogFooter>
         </HistoryDialogContent>
       </HistoryDialog>
 
       {/* Exit Dialog */}
       <Dialog open={openExit} onOpenChange={setOpenExit}>
-        <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
+        <DialogContent className="bg-card/95 backdrop-blur-md border border-destructive/20 text-card-foreground max-w-sm w-80">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
+            <DialogTitle className="text-lg font-bold">Exit Game</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              This will return you to the table selection screen.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
@@ -2232,7 +2250,7 @@ return (
               variant="secondary"
               onClick={() => setOpenExit(false)}
               disabled={processingExit}
-              className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+              className="bg-secondary hover:bg-secondary/80 text-secondary-foreground font-semibold"
             >
               Cancel
             </Button>
@@ -2243,7 +2261,7 @@ return (
                 await handleExitGame();
               }}
               disabled={processingExit}
-              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-semibold"
               aria-label="Confirm exit from poker table"
             >
               Yes, Exit Table
@@ -2261,7 +2279,7 @@ return (
     buy_in_requests
 
   The approved points information is maintained in the table:
-    buy_ins
+    buy_ins.
 */
 
 export default PokerTable;

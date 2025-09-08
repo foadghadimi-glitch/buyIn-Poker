@@ -96,26 +96,26 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
         className="
           w-full max-w-md
           relative z-10
-          bg-black/50
+          bg-card/80
           backdrop-blur-md
-          border border-white/20
-          text-white
-          shadow-2xl
+          border border-border
+          text-card-foreground
+          shadow-elegant
         "
       >
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold text-white mb-2">Welcome to the Poker Table</CardTitle>
+          <CardTitle className="text-3xl font-bold mb-2">Welcome to the Poker Table</CardTitle>
         </CardHeader>
         <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
           <CardContent>
             <div className="space-y-4">
-              <Label htmlFor="name" className="text-lg font-semibold text-gray-200">Player Name</Label>
+              <Label htmlFor="name" className="text-lg font-semibold text-muted-foreground">Player Name</Label>
               <Input
                 id="name"
                 placeholder="Enter your name"
                 value={name}
                 onChange={handleNameChange}
-                className="h-12 text-lg border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-300 text-center font-medium"
+                className="h-12 text-lg border border-input focus:border-primary focus:ring-2 focus:ring-ring/30 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground text-center font-medium"
                 maxLength={30}
                 autoFocus
               />
@@ -128,7 +128,8 @@ const Onboarding = (props: { onSetProfile?: (profile: Player) => void }) => {
             <Button
               type="submit"
               disabled={isSubmitting || !name.trim()}
-              className="w-full h-14 text-lg font-bold btn-poker primary bg-green-600 hover:bg-green-700 text-white py-6"
+              variant="hero"
+              className="w-full h-14 text-lg font-bold"
             >
               {isSubmitting ? 'Joining...' : 'Join the Poker Table'}
             </Button>

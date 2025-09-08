@@ -83,7 +83,7 @@ const App = () => {
       return (
         <TableSelection
           profile={profile}
-          table={table}
+          tables={[]}
           onCreateTable={handleCreateTable}
           onJoinTable={handleJoinTable}
           waitingApproval={waitingApproval}
