@@ -1505,7 +1505,7 @@ return (
   >
     {/* Dark overlay for background image - semi-transparent */}
     {showBackground && (
-      <div className="absolute inset-0 bg-black/40 pointer-events-none" style={{ zIndex: 1 }} />
+      <div className="absolute inset-0 bg-black/75 pointer-events-none" style={{ zIndex: 1 }} />
     )}
     
     {/* Main content - positioned above overlay */}
@@ -1724,21 +1724,21 @@ return (
                     <UITable>
                       <TableHeader>
                         <TableRow className="border-b border-gray-600/40">
-                          <TableHead className="text-slate-200 font-semibold text-xs" style={{
+                          <TableHead className="text-slate-200 font-semibold text-xs text-left" style={{
                             padding: '4px 2px',
                             whiteSpace: 'nowrap',
                             fontSize: '11px'
                           }}>Player</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{
+                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{
                             padding: '4px 2px',
                             whiteSpace: 'nowrap',
                             fontSize: '11px'
                           }}>Buy-ins</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{
+                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{
                             padding: '4px 2px',
                             fontSize: '11px'
                           }}>End Up</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{
+                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{
                             padding: '4px 2px',
                             fontSize: '11px'
                           }}>Profit/7</TableHead>
@@ -1786,8 +1786,11 @@ return (
                                   style={{
                                     width: '100%',
                                     height: 24,
-                                    fontSize: '11px',
-                                    padding: '2px 4px'
+                                    fontSize: '16px',
+                                    padding: '2px 4px',
+                                    WebkitTransform: 'scale(0.7)',
+                                    transformOrigin: 'right center',
+                                    transform: 'scale(0.7)'
                                   }}
                                   value={endUp}
                                   onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
