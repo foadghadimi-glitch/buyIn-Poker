@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,18 +23,23 @@ type TablePlayer = {
 
 type PokerTableRow = PokerTable & {
   players?: TablePlayer[];
+  creator?: string;
+  total_buy_ins?: number;
+  total_end_ups?: number;
+  table_players?: any[];
 };
 
 interface TableSelectionProps {
-  table: any;
+  tables: PokerTableRow[];
   onCreateTable: (table: any) => void;
   onJoinTable: (table: any) => void;
   waitingApproval: boolean;
-  profile?: any; // ADDED
+  profile?: any;
   onSwitchPlayer: () => void;
 }
 
 const TableSelection = ({
+  tables = [],
   onCreateTable,
   onJoinTable,
   waitingApproval,
@@ -61,10 +67,16 @@ const TableSelection = ({
   }, [waitingApproval, tableName, joinCode]);
 
   const handleSwitchPlayer = () => {
-    storage.setProfile(null);
-    storage.setTable(null);
+    storage.clearAll();
     onSwitchPlayer();
     navigate('/onboarding');
+  };
+
+  const joinTable = (tableId: string) => {
+    const table = tables.find(t => t.id === tableId);
+    if (table) {
+      onJoinTable(table);
+    }
   };
 
   const handleCreate = async () => {
@@ -229,119 +241,146 @@ const TableSelection = ({
   };
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-start p-3 pt-8 relative overflow-hidden bg-center bg-cover"
-      style={{ backgroundImage: "url('/Poker_05.png')" }}
-    >
-      {/* Overlay to darken the background image */}
-      <div className="absolute inset-0 bg-black/50"></div>
+    <div className="bg-gradient-page">
+      <div className="container mx-auto p-6">
+        <header className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-white mb-4">
+            Select Your Poker Table
+          </h1>
+          <p className="text-xl text-white/80">
+            Choose a table to join or create a new one
+          </p>
+        </header>
 
-      <div className="space-y-4 w-full max-w-sm relative z-10 flex-shrink-0">
-        <Card className="bg-card/80 backdrop-blur-md border border-border text-card-foreground shadow-elegant">
-          <CardHeader className="p-4">
-            <CardTitle className="text-center text-lg">Join a Poker Table</CardTitle>
+        {tables.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {tables.map((table) => (
+              <Card key={table.id} className="bg-gradient-card hover:shadow-elegant transition-shadow cursor-pointer shadow-card" 
+                    onClick={() => joinTable(table.id)}>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>{table.name}</span>
+                    <Badge variant="secondary">
+                      {table.table_players ? table.table_players.length : 0} players
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Created by {table.creator}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center text-sm text-gray-600">
+                    <span>Total Buy-ins: <span className="font-semibold">${table.total_buy_ins || 0}</span></span>
+                    <span>Total End-ups: <span className="font-semibold">${table.total_end_ups || 0}</span></span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        <Card className="bg-gradient-card shadow-card">
+          <CardHeader>
+            <CardTitle className="text-2xl text-center">Create New Table</CardTitle>
+            <CardDescription className="text-center">
+              Start a new poker game with your friends
+            </CardDescription>
           </CardHeader>
-          <form onSubmit={(e) => { e.preventDefault(); handleJoin(); }}>
-            <CardContent className="p-4 pt-0">
-              <div className="space-y-2">
-                <Label htmlFor="joinCode" className="text-sm font-semibold text-muted-foreground">Enter Table Code</Label>
+          <CardContent>
+            <div className="space-y-4">
+              <Label htmlFor="tableName" className="text-lg font-semibold">Table Name</Label>
+              <Input
+                id="tableName"
+                placeholder="Enter table name"
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                className="h-12 text-lg"
+              />
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button 
+              onClick={handleCreate} 
+              disabled={!tableName.trim() || isCreating}
+              className="w-full btn-poker hero"
+            >
+              {isCreating ? 'Creating...' : 'Create Table'}
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <div className="mt-8 text-center">
+          <Card className="bg-gradient-card shadow-card">
+            <CardHeader>
+              <CardTitle>Join Existing Table</CardTitle>
+              <CardDescription>
+                Enter the table code provided by the table creator
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Label htmlFor="joinCode" className="text-lg font-semibold">Table Code</Label>
                 <Input
                   id="joinCode"
-                  placeholder="1234"
+                  placeholder="Enter 4-digit code"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
-                  className="h-9 text-base border border-input focus:border-primary focus:ring-2 focus:ring-ring/30 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground text-center font-mono rounded-lg"
+                  className="h-12 text-lg text-center font-mono"
+                  maxLength={4}
                 />
               </div>
             </CardContent>
-            <CardFooter className="p-4 pt-0">
-                <Button
-                  type="submit"
-                  disabled={isJoining || waitingApproval}
-                  className="w-full h-10 text-sm font-bold bg-yellow-600 hover:bg-yellow-700 text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
-                >
+            <CardFooter>
+              <Button 
+                onClick={handleJoin} 
+                disabled={!joinCode.trim() || isJoining || waitingApproval}
+                className="w-full btn-poker secondary"
+              >
                 {isJoining ? 'Joining...' : 'Join Table'}
               </Button>
             </CardFooter>
-          </form>
-        </Card>
-
-        <Card className="bg-card/80 backdrop-blur-md border border-border text-card-foreground shadow-elegant">
-          <CardHeader className="p-4">
-            <CardTitle className="text-center text-lg">Create a New Poker Table</CardTitle>
-          </CardHeader>
-          <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
-            <CardContent className="p-4 pt-0">
-              <div className="space-y-2">
-                <Label htmlFor="tableName" className="text-sm font-semibold text-muted-foreground">Name Your Table</Label>
-                <Input
-                  id="tableName"
-                  placeholder="e.g., Friday Night Poker"
-                  value={tableName}
-                  onChange={(e) => setTableName(e.target.value)}
-                  className="h-9 text-base border border-input focus:border-primary focus:ring-2 focus:ring-ring/30 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground text-center font-medium rounded-lg"
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="p-4 pt-0">
-                <Button
-                  type="submit"
-                  disabled={isCreating}
-                  variant="hero"
-                  className="w-full h-10 text-sm font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
-                >
-                {isCreating ? 'Creating...' : 'Create Table'}
-              </Button>
-            </CardFooter>
-          </form>
-        </Card>
-
-        {/* ADDED: Display this card when waiting for approval, instead of navigating away */}
-        {waitingApproval && (
-          <Card className="bg-yellow-900/30 backdrop-blur-md border border-yellow-400/50 text-card-foreground shadow-elegant">
-            <CardHeader>
-              <CardTitle className="text-yellow-300 text-center">Request Sent</CardTitle>
-              <CardDescription className="text-yellow-200 text-center">Waiting for admin approval.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center p-4">
-                <div className="text-lg font-semibold text-yellow-100">You will be redirected once approved.</div>
-              </div>
-            </CardContent>
           </Card>
+        </div>
+
+        {waitingApproval && (
+          <div className="mt-8">
+            <Card className="bg-yellow-100 border-yellow-300">
+              <CardHeader>
+                <CardTitle className="text-yellow-800">Waiting for Approval</CardTitle>
+                <CardDescription className="text-yellow-700">
+                  Your join request has been sent. Please wait for the table admin to approve your request.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
         )}
 
-        {/* Moved cache clear button here - below the cards with extra spacing */}
-        <div className="flex justify-center mt-12 pt-8">
+        <div className="mt-8 text-center">
           <Dialog open={openSwitchPlayerDialog} onOpenChange={setOpenSwitchPlayerDialog}>
             <DialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-card-foreground/70 hover:text-card-foreground hover:bg-accent text-xs px-3 py-2 border border-border backdrop-blur-sm bg-card/20 rounded-md"
-              >
-                Clear Cache & Reset Profile
+              <Button variant="ghost" className="text-white/70 hover:text-white">
+                Switch Player
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card/95 backdrop-blur-md border border-border text-card-foreground">
+            <DialogContent>
               <DialogHeader>
-                <DialogTitle>Clear Cache & Reset Profile</DialogTitle>
-                <DialogDescription className="text-muted-foreground pt-2">
-                  This will clear your current player session from this browser. You will be treated as a new player and will need to create a new profile if your original name is already taken.
+                <DialogTitle>Switch Player</DialogTitle>
+                <DialogDescription>
+                  This will clear your current session and allow you to create a new player profile.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="secondary" onClick={() => setOpenSwitchPlayerDialog(false)}>
                   Cancel
                 </Button>
-                <Button
-                  variant="destructive"
+                <Button 
+                  variant="destructive" 
                   onClick={() => {
                     setOpenSwitchPlayerDialog(false);
                     handleSwitchPlayer();
                   }}
                 >
-                  Clear & Reset
+                  Switch Player
                 </Button>
               </DialogFooter>
             </DialogContent>
