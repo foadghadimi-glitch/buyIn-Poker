@@ -2279,7 +2279,7 @@ return (
     buy_in_requests
 
   The approved points information is maintained in the table:
-    buy_ins
+    buy_ins.
 */
 
 export default PokerTable;
