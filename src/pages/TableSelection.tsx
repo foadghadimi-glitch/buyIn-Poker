@@ -237,58 +237,59 @@ const TableSelection = ({
       <div className="absolute inset-0 bg-black/50"></div>
 
       <div className="space-y-4 w-full max-w-sm relative z-10 flex-shrink-0">
-        <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
+        <Card className="bg-card/80 backdrop-blur-md border border-border text-card-foreground shadow-elegant">
           <CardHeader className="p-4">
-            <CardTitle className="text-white text-center text-lg">Join a Poker Table</CardTitle>
+            <CardTitle className="text-center text-lg">Join a Poker Table</CardTitle>
           </CardHeader>
           <form onSubmit={(e) => { e.preventDefault(); handleJoin(); }}>
             <CardContent className="p-4 pt-0">
               <div className="space-y-2">
-                <Label htmlFor="joinCode" className="text-sm font-semibold text-gray-200">Enter Table Code</Label>
+                <Label htmlFor="joinCode" className="text-sm font-semibold text-muted-foreground">Enter Table Code</Label>
                 <Input
                   id="joinCode"
                   placeholder="1234"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
-                  className="h-9 text-base border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-100 text-center font-mono rounded-lg shadow-inner"
+                  className="h-9 text-base border border-input focus:border-primary focus:ring-2 focus:ring-ring/30 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground text-center font-mono rounded-lg"
                 />
               </div>
             </CardContent>
             <CardFooter className="p-4 pt-0">
-              <Button
-                type="submit"
-                disabled={isJoining || waitingApproval}
-                className="w-full h-10 text-sm font-bold bg-[#fbc02d] hover:bg-[#f9a825] active:bg-[#f57f17] text-black transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
-              >
+                <Button
+                  type="submit"
+                  disabled={isJoining || waitingApproval}
+                  className="w-full h-10 text-sm font-bold bg-yellow-600 hover:bg-yellow-700 text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
+                >
                 {isJoining ? 'Joining...' : 'Join Table'}
               </Button>
             </CardFooter>
           </form>
         </Card>
 
-        <Card className="bg-black/50 backdrop-blur-md border border-white/20 text-white shadow-2xl">
+        <Card className="bg-card/80 backdrop-blur-md border border-border text-card-foreground shadow-elegant">
           <CardHeader className="p-4">
-            <CardTitle className="text-white text-center text-lg">Create a New Poker Table</CardTitle>
+            <CardTitle className="text-center text-lg">Create a New Poker Table</CardTitle>
           </CardHeader>
           <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }}>
             <CardContent className="p-4 pt-0">
               <div className="space-y-2">
-                <Label htmlFor="tableName" className="text-sm font-semibold text-gray-200">Name Your Table</Label>
+                <Label htmlFor="tableName" className="text-sm font-semibold text-muted-foreground">Name Your Table</Label>
                 <Input
                   id="tableName"
                   placeholder="e.g., Friday Night Poker"
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
-                  className="h-9 text-base border-2 border-white/30 focus:border-white/50 focus:ring-2 focus:ring-white/30 transition-all duration-200 bg-white/10 text-white placeholder-gray-100 text-center font-medium rounded-lg shadow-inner"
+                  className="h-9 text-base border border-input focus:border-primary focus:ring-2 focus:ring-ring/30 transition-all duration-200 bg-background text-foreground placeholder-muted-foreground text-center font-medium rounded-lg"
                 />
               </div>
             </CardContent>
             <CardFooter className="p-4 pt-0">
-              <Button
-                type="submit"
-                disabled={isCreating}
-                className="w-full h-10 text-sm font-bold bg-[#2e7d32] hover:bg-[#388e3c] active:bg-[#1b5e20] text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
-              >
+                <Button
+                  type="submit"
+                  disabled={isCreating}
+                  variant="hero"
+                  className="w-full h-10 text-sm font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] rounded-lg"
+                >
                 {isCreating ? 'Creating...' : 'Create Table'}
               </Button>
             </CardFooter>
@@ -297,7 +298,7 @@ const TableSelection = ({
 
         {/* ADDED: Display this card when waiting for approval, instead of navigating away */}
         {waitingApproval && (
-          <Card className="bg-yellow-900/30 backdrop-blur-md border border-yellow-400/50 text-white shadow-2xl">
+          <Card className="bg-yellow-900/30 backdrop-blur-md border border-yellow-400/50 text-card-foreground shadow-elegant">
             <CardHeader>
               <CardTitle className="text-yellow-300 text-center">Request Sent</CardTitle>
               <CardDescription className="text-yellow-200 text-center">Waiting for admin approval.</CardDescription>
@@ -317,15 +318,15 @@ const TableSelection = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white/70 hover:text-white hover:bg-white/20 text-xs px-3 py-2 border border-white/20 backdrop-blur-sm bg-black/20 rounded-md"
+                className="text-card-foreground/70 hover:text-card-foreground hover:bg-accent text-xs px-3 py-2 border border-border backdrop-blur-sm bg-card/20 rounded-md"
               >
                 Clear Cache & Reset Profile
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-gray-900/90 backdrop-blur-md border-white/20 text-white">
+            <DialogContent className="bg-card/95 backdrop-blur-md border border-border text-card-foreground">
               <DialogHeader>
                 <DialogTitle>Clear Cache & Reset Profile</DialogTitle>
-                <DialogDescription className="text-gray-300 pt-2">
+                <DialogDescription className="text-muted-foreground pt-2">
                   This will clear your current player session from this browser. You will be treated as a new player and will need to create a new profile if your original name is already taken.
                 </DialogDescription>
               </DialogHeader>
