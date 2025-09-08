@@ -1702,11 +1702,13 @@ return (
                     width: '400px',
                     maxWidth: '90vw',
                     padding: '16px',
-                    height: '98vh',
-                    maxHeight: '98vh'
+                    height: '85vh',
+                    maxHeight: '85vh',
+                    display: 'flex',
+                    flexDirection: 'column'
                   }}
                 >
-                  <DialogHeader className="pb-3">
+                  <DialogHeader className="flex-shrink-0 pb-3">
                     <DialogTitle className="text-lg font-bold text-white">End Up Game</DialogTitle>
                   </DialogHeader>
                   <div
@@ -1716,7 +1718,7 @@ return (
                       overflowX: 'auto',
                       overflowY: 'auto',
                       padding: '0',
-                      marginBottom: '16px'
+                      minHeight: 0
                     }}
                   >
                     <UITable>
@@ -2301,41 +2303,39 @@ return (
                       </TableCell>
                     </TableRow>
                   );
-                })}
-              </TableBody>
-            </UITable>
-          </div>
-          <DialogFooter>
-            {isAdmin ? (
-              <div className="flex gap-2 w-full">
-                <Button 
-                  variant="secondary" 
-                  onClick={() => setOpenEndUp(false)} 
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-                >
-                  Close
-                </Button>
-                <Button 
-                  onClick={handleSaveEndUp} 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
-                >
-                  Save End Up
-                </Button>
-              </div>
-            ) : (
-              <Button 
-                variant="secondary" 
-                onClick={() => setOpenEndUp(false)} 
-                className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-              >
-                Close
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Exit Dialog */}
+                        })}
+                      </TableBody>
+                    </UITable>
+                  </div>
+                  <DialogFooter className="flex-shrink-0 mt-3">
+                    {isAdmin ? (
+                      <div className="flex gap-2 w-full">
+                        <Button 
+                          variant="secondary" 
+                          onClick={() => setOpenEndUp(false)} 
+                          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                        >
+                          Close
+                        </Button>
+                        <Button 
+                          onClick={handleSaveEndUp} 
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
+                        >
+                          Save End Up
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => setOpenEndUp(false)} 
+                        className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      >
+                        Close
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>      {/* Exit Dialog */}
       <Dialog open={openExit} onOpenChange={setOpenExit}>
         <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
           <DialogHeader>
