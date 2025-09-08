@@ -1701,40 +1701,44 @@ return (
                   style={{
                     width: '400px',
                     maxWidth: '90vw',
-                    padding: '20px',
-                    minHeight: '500px',
-                    maxHeight: '90vh'
+                    padding: '16px',
+                    height: '98vh',
+                    maxHeight: '98vh'
                   }}
                 >
-                  <DialogHeader>
+                  <DialogHeader className="pb-3">
                     <DialogTitle className="text-lg font-bold text-white">End Up Game</DialogTitle>
                   </DialogHeader>
                   <div
                     style={{
-                      fontSize: '14px',
-                      height: '450px',
-                      maxHeight: '70vh',
+                      fontSize: '12px',
+                      flex: 1,
                       overflowX: 'auto',
                       overflowY: 'auto',
-                      padding: '0'
+                      padding: '0',
+                      marginBottom: '16px'
                     }}
                   >
                     <UITable>
                       <TableHeader>
                         <TableRow className="border-b border-gray-600/40">
-                          <TableHead className="text-slate-200 font-semibold text-sm" style={{
-                            padding: '8px 4px',
-                            whiteSpace: 'nowrap'
+                          <TableHead className="text-slate-200 font-semibold text-xs" style={{
+                            padding: '4px 2px',
+                            whiteSpace: 'nowrap',
+                            fontSize: '11px'
                           }}>Player</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                            padding: '8px 4px',
-                            whiteSpace: 'nowrap'
+                          <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{
+                            padding: '4px 2px',
+                            whiteSpace: 'nowrap',
+                            fontSize: '11px'
                           }}>Buy-ins</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                            padding: '8px 4px'
+                          <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{
+                            padding: '4px 2px',
+                            fontSize: '11px'
                           }}>End Up</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                            padding: '8px 4px'
+                          <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{
+                            padding: '4px 2px',
+                            fontSize: '11px'
                           }}>Profit/7</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1747,48 +1751,51 @@ return (
                             <TableRow
                               key={p.id}
                               className="border-b border-gray-700/40"
-                              style={{ minHeight: 40 }}
+                              style={{ minHeight: 32 }}
                             >
-                              <TableCell className="text-white font-medium text-sm truncate" style={{
-                                padding: '8px 4px',
-                                height: 40,
+                              <TableCell className="text-white font-medium text-xs truncate" style={{
+                                padding: '4px 2px',
+                                height: 32,
                                 verticalAlign: 'middle',
-                                maxWidth: '90px',
+                                maxWidth: '80px',
                                 overflow: 'hidden',
-                                textOverflow: 'ellipsis'
+                                textOverflow: 'ellipsis',
+                                fontSize: '12px'
                               }}>{p.name}</TableCell>
-                              <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                                padding: '8px 4px',
-                                height: 40,
+                              <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
+                                padding: '4px 2px',
+                                height: 32,
                                 verticalAlign: 'middle',
+                                fontSize: '12px'
                               }}>
                                 {totalBuyIns}
                               </TableCell>
                               <TableCell style={{
-                                padding: '8px 4px',
+                                padding: '4px 2px',
                                 textAlign: 'right',
-                                height: 40,
+                                height: 32,
                                 verticalAlign: 'middle',
                               }}>
                                 <Input
                                   type="number"
                                   step="any"
                                   disabled={!isAdmin}
-                                  className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm font-mono text-right"
+                                  className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs font-mono text-right"
                                   style={{
                                     width: '100%',
-                                    height: 32,
-                                    fontSize: '14px',
-                                    padding: '4px 8px'
+                                    height: 24,
+                                    fontSize: '11px',
+                                    padding: '2px 4px'
                                   }}
                                   value={endUp}
                                   onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
                                 />
                               </TableCell>
-                              <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                                padding: '8px 4px',
-                                height: 40,
+                              <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
+                                padding: '4px 2px',
+                                height: 32,
                                 verticalAlign: 'middle',
+                                fontSize: '12px'
                               }}>
                                 {profitDiv7}
                               </TableCell>
@@ -1798,11 +1805,14 @@ return (
                       </TableBody>
                     </UITable>
                   </div>
-                                   <DialogFooter>
-                    <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
-                    {isAdmin && (
-                      <Button onClick={handleSaveEndUp} className="ml-2 bg-green-600 hover:bg-green-700 text-white font-semibold">
+                  <DialogFooter>
+                    {isAdmin ? (
+                      <Button onClick={handleSaveEndUp} className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold">
                         Save End Up
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold">
+                        Close
                       </Button>
                     )}
                   </DialogFooter>
@@ -2198,9 +2208,9 @@ return (
           style={{
             width: '400px',
             maxWidth: '90vw',
-            padding: '20px',
-            minHeight: '500px',
-            maxHeight: '90vh'
+            padding: '16px',
+            height: '98vh',
+            maxHeight: '98vh'
           }}
         >
           <DialogHeader>
@@ -2208,12 +2218,12 @@ return (
           </DialogHeader>
           <div
             style={{
-              fontSize: '14px',
-              height: '450px',
-              maxHeight: '70vh',
+              fontSize: '12px',
+              flex: 1,
               overflowX: 'auto',
               overflowY: 'auto',
-              padding: '0'
+              padding: '0',
+              marginBottom: '16px'
             }}
           >
             <UITable>
@@ -2296,10 +2306,29 @@ return (
             </UITable>
           </div>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
-            {isAdmin && (
-              <Button onClick={handleSaveEndUp} className="ml-2 bg-green-600 hover:bg-green-700 text-white font-semibold">
-                Save End Up
+            {isAdmin ? (
+              <div className="flex gap-2 w-full">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setOpenEndUp(false)} 
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                >
+                  Close
+                </Button>
+                <Button 
+                  onClick={handleSaveEndUp} 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
+                >
+                  Save End Up
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="secondary" 
+                onClick={() => setOpenEndUp(false)} 
+                className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+              >
+                Close
               </Button>
             )}
           </DialogFooter>
