@@ -1702,8 +1702,8 @@ return (
                     width: '400px',
                     maxWidth: '90vw',
                     padding: '16px',
-                    height: '85vh',
-                    maxHeight: '85vh',
+                    height: '82vh',
+                    maxHeight: '82vh',
                     display: 'flex',
                     flexDirection: 'column'
                   }}
@@ -1806,22 +1806,36 @@ return (
                         })}
                       </TableBody>
                     </UITable>
-                  </div>
-                  <DialogFooter>
-                    {isAdmin ? (
-                      <Button onClick={handleSaveEndUp} className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold">
-                        Save End Up
-                      </Button>
-                    ) : (
-                      <Button variant="secondary" onClick={() => setOpenEndUp(false)} className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold">
-                        Close
-                      </Button>
-                    )}
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              {/* Edit Profile button */}
+          </div>
+          <DialogFooter className="flex-shrink-0 mt-3">
+            {isAdmin ? (
+              <div className="flex gap-2 w-full">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setOpenEndUp(false)} 
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                >
+                  Close
+                </Button>
+                <Button 
+                  onClick={handleSaveEndUp} 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
+                >
+                  Save End Up
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="secondary" 
+                onClick={() => setOpenEndUp(false)} 
+                className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+              >
+                Close
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>              {/* Edit Profile button */}
               <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                 <DialogTrigger asChild>
                   <button
@@ -2203,139 +2217,7 @@ return (
         </HistoryDialogContent>
       </HistoryDialog>
 
-      {/* End Up Dialog */}
-      <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
-        <DialogContent
-          className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
-          style={{
-            width: '400px',
-            maxWidth: '90vw',
-            padding: '16px',
-            height: '98vh',
-            maxHeight: '98vh'
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">End Up Game</DialogTitle>
-          </DialogHeader>
-          <div
-            style={{
-              fontSize: '12px',
-              flex: 1,
-              overflowX: 'auto',
-              overflowY: 'auto',
-              padding: '0',
-              marginBottom: '16px'
-            }}
-          >
-            <UITable>
-              <TableHeader>
-                <TableRow className="border-b border-gray-600/40">
-                  <TableHead className="text-slate-200 font-semibold text-sm" style={{
-                    padding: '8px 4px',
-                    whiteSpace: 'nowrap'
-                  }}>Player</TableHead>
-                  <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                    padding: '8px 4px',
-                    whiteSpace: 'nowrap'
-                  }}>Buy-ins</TableHead>
-                  <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                    padding: '8px 4px'
-                  }}>End Up</TableHead>
-                  <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{
-                    padding: '8px 4px'
-                  }}>Profit/7</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Array.isArray(players) && players.map((p: any) => {
-                  const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                  const endUp = endUpValues[p.id] ?? 0;
-                  const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
-                  return (
-                    <TableRow
-                      key={p.id}
-                      className="border-b border-gray-700/40"
-                      style={{ minHeight: 40 }}
-                    >
-                      <TableCell className="text-white font-medium text-sm truncate" style={{
-                        padding: '8px 4px',
-                        height: 40,
-                        verticalAlign: 'middle',
-                        maxWidth: '90px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>{p.name}</TableCell>
-                      <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                        padding: '8px 4px',
-                        height: 40,
-                        verticalAlign: 'middle',
-                      }}>
-                        {totalBuyIns}
-                      </TableCell>
-                      <TableCell style={{
-                        padding: '8px 4px',
-                        textAlign: 'right',
-                        height: 40,
-                        verticalAlign: 'middle',
-                      }}>
-                        <Input
-                          type="number"
-                          step="any"
-                          disabled={!isAdmin}
-                          className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm font-mono text-right"
-                          style={{
-                            width: '100%',
-                            height: 32,
-                            fontSize: '14px',
-                            padding: '4px 8px'
-                          }}
-                          value={endUp}
-                          onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
-                        />
-                      </TableCell>
-                      <TableCell className="text-emerald-300 font-mono text-right text-sm" style={{
-                        padding: '8px 4px',
-                        height: 40,
-                        verticalAlign: 'middle',
-                      }}>
-                        {profitDiv7}
-                      </TableCell>
-                    </TableRow>
-                  );
-                        })}
-                      </TableBody>
-                    </UITable>
-                  </div>
-                  <DialogFooter className="flex-shrink-0 mt-3">
-                    {isAdmin ? (
-                      <div className="flex gap-2 w-full">
-                        <Button 
-                          variant="secondary" 
-                          onClick={() => setOpenEndUp(false)} 
-                          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-                        >
-                          Close
-                        </Button>
-                        <Button 
-                          onClick={handleSaveEndUp} 
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
-                        >
-                          Save End Up
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button 
-                        variant="secondary" 
-                        onClick={() => setOpenEndUp(false)} 
-                        className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-                      >
-                        Close
-                      </Button>
-                    )}
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>      {/* Exit Dialog */}
+      {/* Exit Dialog */}
       <Dialog open={openExit} onOpenChange={setOpenExit}>
         <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
           <DialogHeader>
