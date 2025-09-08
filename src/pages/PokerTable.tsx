@@ -1768,7 +1768,7 @@ return (
                                 padding: '4px 2px',
                                 height: 32,
                                 verticalAlign: 'middle',
-                                fontSize: '12px'
+                                fontSize: '14px'
                               }}>
                                 {totalBuyIns}
                               </TableCell>
@@ -1797,7 +1797,7 @@ return (
                                 padding: '4px 2px',
                                 height: 32,
                                 verticalAlign: 'middle',
-                                fontSize: '12px'
+                                fontSize: '14px'
                               }}>
                                 {profitDiv7}
                               </TableCell>
