@@ -1785,12 +1785,9 @@ return (
                                   className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs font-mono text-right"
                                   style={{
                                     width: '100%',
-                                    height: 24,
+                                    height: 28,
                                     fontSize: '16px',
-                                    padding: '2px 4px',
-                                    WebkitTransform: 'scale(0.7)',
-                                    transformOrigin: 'right center',
-                                    transform: 'scale(0.7)'
+                                    padding: '2px 6px'
                                   }}
                                   value={endUp}
                                   onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
