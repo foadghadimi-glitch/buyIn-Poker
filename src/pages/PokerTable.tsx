@@ -1767,7 +1767,7 @@ return (
                               <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
                                 padding: '4px 2px',
                                 height: 32,
-                                                               verticalAlign: 'middle',
+                                                                                              verticalAlign: 'middle',
                                 fontSize: '14px'
                               }}>
                                 {totalBuyIns}
@@ -2197,6 +2197,17 @@ return (
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Modal Footer with Close Button */}
+              <div className="flex-shrink-0 border-t border-emerald-800/20 p-4">
+                <Button
+                  onClick={() => setOpenPlayerModal(false)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold h-12 rounded-xl transition shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  aria-label="Close player list and return to poker table"
+                >
+                  Close
+                </Button>
               </div>
             </div>
           </div>
