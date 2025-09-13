@@ -1767,7 +1767,7 @@ return (
                               <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
                                 padding: '4px 2px',
                                 height: 32,
-                                verticalAlign: 'middle',
+                                                               verticalAlign: 'middle',
                                 fontSize: '14px'
                               }}>
                                 {totalBuyIns}
@@ -1804,6 +1804,49 @@ return (
                             </TableRow>
                           );
                         })}
+                        {/* Summary Row */}
+                        {(() => {
+                          const totalBuyIns = players.reduce((sum, p) => sum + parseInt(String(playerTotals[p.id] ?? 0), 10), 0);
+                          const totalEndUp = players.reduce((sum, p) => sum + (endUpValues[p.id] ?? 0), 0);
+                          const totalProfit = (totalEndUp - totalBuyIns) / 7;
+                          
+                          return (
+                            <TableRow className="border-t-2 border-emerald-500/50 bg-emerald-900/20">
+                              <TableCell className="text-emerald-200 font-bold text-xs" style={{
+                                padding: '6px 2px',
+                                height: 36,
+                                verticalAlign: 'middle',
+                                fontSize: '12px'
+                              }}>
+                                TOTAL
+                              </TableCell>
+                              <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
+                                padding: '6px 2px',
+                                height: 36,
+                                verticalAlign: 'middle',
+                                fontSize: '14px'
+                              }}>
+                                {totalBuyIns}
+                              </TableCell>
+                              <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
+                                padding: '6px 2px',
+                                height: 36,
+                                verticalAlign: 'middle',
+                                fontSize: '14px'
+                              }}>
+                                {totalEndUp.toFixed(0)}
+                              </TableCell>
+                              <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
+                                padding: '6px 2px',
+                                height: 36,
+                                verticalAlign: 'middle',
+                                fontSize: '14px'
+                              }}>
+                                {totalProfit.toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })()}
                       </TableBody>
                     </UITable>
           </div>
