@@ -1542,23 +1542,17 @@ return (
           </div>
         </div>
 
-        {/* Spectator Join Request */}
+        {/* Spectator Back to Selection */}
         {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
           <div className="py-3 px-3 border rounded-lg bg-black/60 border-emerald-700/30">
             <h3 className="font-semibold text-base mb-2 text-white">Viewing as spectator</h3>
-            {!profile && (
-              <p className="text-sm text-red-300 mb-2">
-                Your profile is missing. Open Onboarding to recreate it, then request to join.
-              </p>
-            )}
-            <p className="text-sm text-slate-200 mb-3">Request to join. Admin approval required.</p>
+            <p className="text-sm text-slate-200 mb-3">You are currently viewing this table as a spectator.</p>
             <Button
-              onClick={handleRequestJoin}
-              className="w-full h-10 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-              disabled={processingJoinRequestLocal || pendingJoinPlayerIds.has(profile?.id || '')}
-              aria-label="Request to join poker table"
+              onClick={onExit}
+              className="w-full h-10 text-sm font-semibold bg-slate-600 hover:bg-slate-700 text-white border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+              aria-label="Return to table selection"
             >
-              <span role="img" aria-label="wave" className="mr-2">👋</span> Request to Join
+              <span role="img" aria-label="back arrow" className="mr-2">←</span> Back to Selection
             </Button>
           </div>
         )}
@@ -1777,7 +1771,7 @@ return (
                                 textAlign: 'right',
                                 height: 32,
                                 verticalAlign: 'middle',
-                              }}>
+                                                           }}>
                                 <Input
                                   type="number"
                                   step="any"
