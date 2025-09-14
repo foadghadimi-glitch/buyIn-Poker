@@ -11,9 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogHeader as HistoryDialogHeader, DialogTitle as HistoryDialogTitle, DialogFooter as HistoryDialogFooter, DialogTrigger as HistoryDialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Player, PokerTable as PokerTableType } from '@/integrations/supabase/types';
+import { Player, PokerTable as PokerTableType, Game, GameProfit } from '@/integrations/supabase/types';
 import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
-import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy } from 'lucide-react';
+import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3 } from 'lucide-react';
 
 type PokerTableRow = {
   admin_player_id?: string; // changed from admin_user_id
@@ -103,6 +103,8 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
   const [openHistory, setOpenHistory] = useState(false); // Add state for history dialog
   const [openEndUp, setOpenEndUp] = useState(false); // Add state for end up dialog
   const [openExit, setOpenExit] = useState(false);
+  const [openSummary, setOpenSummary] = useState(false); // Add state for summary dialog
+  const [openStartNewGame, setOpenStartNewGame] = useState(false); // Add state for start new game dialog
   const [amount, setAmount] = useState('');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [playerTotals, setPlayerTotals] = useState<Record<string, number>>({});
@@ -122,6 +124,13 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
   const processingJoinRef = useRef(false);
   const [adminName, setAdminName] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [currentGame, setCurrentGame] = useState<Game | null>(null);
+  const [gameProfits, setGameProfits] = useState<GameProfit[]>([]);
+  const [summaryData, setSummaryData] = useState<{
+    playerName: string;
+    totalProfit: number;
+    gameProfits: { gameNumber: number; profit: number }[];
+  }[]>([]);
 
   const handleCopyJoinCode = () => {
     if (!normalizedJoinCode) return;
@@ -191,6 +200,8 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     await ensureCurrentPlayerActive(tableId);
     // NEW: load persisted end-up values so UI reflects saved values after refresh/reload
     await fetchEndUpValues(tableId);
+    // NEW: fetch current game
+    await fetchCurrentGame(tableId);
     console.log('[PokerTable][refresh] done', { tableId, source });
   };
 
@@ -244,6 +255,13 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
       refreshTableData(table.id, refreshKey !== undefined ? `refreshKey ${refreshKey}` : 'initial mount/table change');
     }
   }, [table?.id, refreshKey]);
+
+  // Fetch current game when table changes
+  useEffect(() => {
+    if (table?.id) {
+      fetchCurrentGame(table.id);
+    }
+  }, [table?.id]);
 
   // New helper: fetch totals for a table and update playerTotals + players
   const fetchTotals = async (tableId?: string): Promise<Record<string, number> | null> => {
@@ -750,6 +768,15 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
           }
         } catch (e) {
           console.warn('[PokerTable] broadcast join_refresh refresh failed', e);
+        }
+      })
+      .on('broadcast', { event: 'new_game_started' }, async (payload) => {
+        console.log('[PokerTable][broadcast][new_game_started] received', payload);
+        try {
+          await refreshTableData(table.id, 'broadcast:new_game_started');
+          toast.info(`New game ${payload?.payload?.gameNumber || ''} started!`);
+        } catch (e) {
+          console.warn('[PokerTable] broadcast new_game_started refresh failed', e);
         }
       })
       .subscribe();
@@ -1390,16 +1417,22 @@ const fetchEndUpValues = async (tableId?: string) => {
       map[r.player_id] = Number(r.value || 0);
     });
     setEndUpValues(map);
-    console.log('[PokerTable][fetchEndUpValues] loaded', { tableId: id, count: Object.keys(map).length });
+    console.log('[PokerTable][fetchEndUpValues] loaded', { tableId: id, gameId: currentGame.id, count: Object.keys(map).length });
   } catch (e) {
     console.warn('[PokerTable][fetchEndUpValues] exception - table may not exist yet:', e);
     // Continue without end-up values if table doesn't exist
   }
 };
 
+// Helper function to calculate profit - SINGLE SOURCE OF TRUTH
+// If you need to change the profit formula, only modify this function
+const calculatePlayerProfit = (playerId: string, endUpValue: number, totalBuyIns: number) => {
+  return (endUpValue - totalBuyIns) / 7;
+};
+
 // REPLACE: Admin action now persists to DB and broadcasts
 const handleSaveEndUp = async () => {
-  if (!table?.id) return;
+  if (!table?.id || !currentGame?.id) return;
   try {
     // Prepare rows for upsert: one row per player with numeric value
     const rows = Object.keys(endUpValues).map(pid => ({
@@ -1435,6 +1468,99 @@ const handleSaveEndUp = async () => {
       }
     }
 
+    // Calculate and save profits for current game
+    // IMPORTANT: Calculate profits for ALL players based on participation in current game
+    // - Players who participated (have buy-ins OR end-up values): calculate actual profit
+    // - Players who didn't participate (no buy-ins AND no end-up values): set profit to zero
+    // This ensures correct summary totals regardless of player status (active/inactive)
+    if (currentGame?.id) {
+      try {
+        // Get ALL players for this table (both active and inactive)
+        const { data: tablePlayers, error: playersError } = await supabase
+          .from('table_players')
+          .select('player_id, status')
+          .eq('table_id', table.id);
+        
+        if (playersError) {
+          console.warn('[PokerTable] handleSaveEndUp - failed to get table players:', playersError);
+        } else if (tablePlayers && tablePlayers.length > 0) {
+          const activePlayers = tablePlayers.filter(tp => tp.status === 'active');
+          const inactivePlayers = tablePlayers.filter(tp => tp.status === 'inactive');
+          console.log('[PokerTable] handleSaveEndUp - calculating profits for all players:', {
+            total: tablePlayers.length,
+            active: activePlayers.length,
+            inactive: inactivePlayers.length
+          });
+          
+          // Calculate profits for ALL players (active and inactive)
+          for (const tp of tablePlayers) {
+            const playerId = tp.player_id;
+            
+            // Get total buy-ins for this player
+            const { data: buyIns, error: buyInsError } = await supabase
+              .from('buy_ins')
+              .select('amount')
+              .eq('table_id', table.id)
+              .eq('player_id', playerId);
+            
+            if (buyInsError) {
+              console.warn('[PokerTable] handleSaveEndUp - failed to get buy-ins for player:', playerId, buyInsError);
+              continue;
+            }
+            
+            // Calculate profit based on whether player participated in current game
+            const totalBuyIns = buyIns?.reduce((sum, bi) => sum + Number(bi.amount), 0) || 0;
+            const endUpValue = Number(endUpValues[playerId] || 0);
+            
+            let profit = 0;
+            
+            // If player has buy-ins OR end-up values, they participated in this game
+            if (totalBuyIns > 0 || endUpValue > 0) {
+              // Player participated: calculate actual profit
+              profit = calculatePlayerProfit(playerId, endUpValue, totalBuyIns);
+              
+              console.log('[PokerTable] handleSaveEndUp - PARTICIPATED player profit calculation:', {
+                playerId,
+                status: tp.status,
+                totalBuyIns,
+                endUpValue,
+                profit
+              });
+            } else {
+              // Player didn't participate: set profit to zero
+              profit = 0;
+              
+              console.log('[PokerTable] handleSaveEndUp - NON-PARTICIPATED player profit (zero):', {
+                playerId,
+                status: tp.status,
+                totalBuyIns,
+                endUpValue,
+                profit
+              });
+            }
+            
+            // Save profit to game_profits table
+            const { error: profitError } = await supabase
+              .from('game_profits')
+              .upsert({
+                table_id: table.id,
+                game_id: currentGame.id,
+                player_id: playerId,
+                profit: profit
+              }, {
+                onConflict: 'table_id,game_id,player_id'
+              });
+            
+            if (profitError) {
+              console.warn('[PokerTable] handleSaveEndUp - failed to save profit for player:', playerId, profitError);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[PokerTable] handleSaveEndUp - failed to calculate profits:', e);
+      }
+    }
+
     // Broadcast so other clients update quickly (they listen for end_up_updated)
     try {
       await supabase
@@ -1444,14 +1570,207 @@ const handleSaveEndUp = async () => {
           event: 'end_up_updated',
           payload: { endUpValues }
         });
+      
+      // Also broadcast that profits were calculated
+      await supabase
+        .channel('table_' + table.id)
+        .send({
+          type: 'broadcast',
+          event: 'profits_calculated',
+          payload: { gameId: currentGame?.id }
+        });
     } catch (e) {
       console.warn('[PokerTable] handleSaveEndUp broadcast failed (ignored)', e);
     }
 
-    toast.success('End-up values saved and broadcasted.');
+    toast.success('End-up values saved! Profits calculated and available in Summary.');
   } catch (e) {
     console.error('[PokerTable] handleSaveEndUp failed', e);
     toast.error('Failed to save end-up values.');
+  }
+};
+
+// NEW: Handle starting a new game
+const handleStartNewGame = async () => {
+  if (!table?.id || !isAdmin) return;
+  
+  try {
+    // Mark current game as completed (profits already calculated when "Save End Up" was clicked)
+    if (currentGame?.id) {
+      await supabase
+        .from('games')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .eq('id', currentGame.id);
+    }
+    
+    // Reset the table (clear buy-ins and end-ups)
+    await (supabase as any).rpc('reset_table_for_new_game', { p_table_id: table.id });
+    
+    // Create a new game
+    const { data: newGameId, error: gameError } = await (supabase as any).rpc('create_new_game', { p_table_id: table.id });
+    
+    if (gameError) {
+      console.error('[PokerTable] Failed to create new game:', gameError);
+      toast.error('Failed to start new game.');
+      return;
+    }
+    
+    // Fetch the new game details
+    const { data: newGame, error: fetchError } = await supabase
+      .from('games')
+      .select('*')
+      .eq('id', newGameId)
+      .single();
+    
+    if (fetchError) {
+      console.error('[PokerTable] Failed to fetch new game:', fetchError);
+      toast.error('Failed to fetch new game details.');
+      return;
+    }
+    
+    setCurrentGame(newGame);
+    setEndUpValues({});
+    
+    // Refresh table data
+    await refreshTableData(table.id, 'start new game');
+    
+    // Broadcast to other clients
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'new_game_started',
+        payload: { gameId: newGameId, gameNumber: newGame.game_number }
+      });
+    
+    toast.success(`Game ${newGame.game_number} started!`);
+    setOpenStartNewGame(false);
+  } catch (e) {
+    console.error('[PokerTable] handleStartNewGame error:', e);
+    toast.error('Failed to start new game.');
+  }
+};
+
+// NEW: Fetch current game for the table
+const fetchCurrentGame = async (tableId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('games')
+      .select('*')
+      .eq('table_id', tableId)
+      .eq('status', 'active')
+      .order('game_number', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (error) {
+      console.warn('[PokerTable] fetchCurrentGame error:', error);
+      return;
+    }
+    
+    setCurrentGame(data);
+  } catch (e) {
+    console.warn('[PokerTable] fetchCurrentGame exception:', e);
+  }
+};
+
+// NEW: Fetch summary data (profits per player per game)
+const fetchSummaryData = async (tableId: string) => {
+  try {
+    // Fetch game_profits data (simple query without joins)
+    const { data: profits, error: profitsError } = await supabase
+      .from('game_profits')
+      .select('*')
+      .eq('table_id', tableId);
+    
+    if (profitsError) {
+      console.warn('[PokerTable] fetchSummaryData profits error:', profitsError);
+      // If no game_profits exist yet, show empty summary
+      setSummaryData([]);
+      return;
+    }
+    
+    // If no profits data, show empty summary
+    if (!profits || profits.length === 0) {
+      setSummaryData([]);
+      return;
+    }
+    
+    // Get unique game_ids and player_ids
+    const gameIds = [...new Set(profits.map((p: any) => p.game_id))];
+    const playerIds = [...new Set(profits.map((p: any) => p.player_id))];
+    
+    // Fetch games data
+    const { data: games, error: gamesError } = await supabase
+      .from('games')
+      .select('id, game_number')
+      .in('id', gameIds)
+      .order('game_number', { ascending: true });
+    
+    if (gamesError) {
+      console.warn('[PokerTable] fetchSummaryData games error:', gamesError);
+      setSummaryData([]);
+      return;
+    }
+    
+    // Fetch players data
+    const { data: players, error: playersError } = await supabase
+      .from('players')
+      .select('id, name')
+      .in('id', playerIds);
+    
+    if (playersError) {
+      console.warn('[PokerTable] fetchSummaryData players error:', playersError);
+      setSummaryData([]);
+      return;
+    }
+    
+    // Create lookup maps
+    const gamesMap = new Map(games?.map((g: any) => [g.id, g.game_number]) || []);
+    const playersMap = new Map(players?.map((p: any) => [p.id, p.name]) || []);
+    
+    // If no games found, show empty summary
+    if (gamesMap.size === 0) {
+      setSummaryData([]);
+      return;
+    }
+    
+    // Group by player and calculate totals
+    const playerMap = new Map<string, {
+      playerName: string;
+      totalProfit: number;
+      gameProfits: { gameNumber: number; profit: number }[];
+    }>();
+    
+    profits.forEach((profit: any) => {
+      const playerId = profit.player_id;
+      const playerName = playersMap.get(playerId) || 'Unknown Player';
+      const gameNumber = gamesMap.get(profit.game_id) || 0;
+      const profitValue = Number(profit.profit);
+      
+      if (!playerMap.has(playerId)) {
+        playerMap.set(playerId, {
+          playerName,
+          totalProfit: 0,
+          gameProfits: []
+        });
+      }
+      
+      const playerData = playerMap.get(playerId)!;
+      playerData.totalProfit += profitValue;
+      playerData.gameProfits.push({ gameNumber, profit: profitValue });
+    });
+    
+    // Sort game profits by game number for each player
+    playerMap.forEach((playerData) => {
+      playerData.gameProfits.sort((a, b) => a.gameNumber - b.gameNumber);
+    });
+    
+    // Convert to array and sort by total profit descending
+    const summaryArray = Array.from(playerMap.values()).sort((a, b) => b.totalProfit - a.totalProfit);
+    setSummaryData(summaryArray);
+  } catch (e) {
+    console.warn('[PokerTable] fetchSummaryData exception:', e);
   }
 };
 
@@ -1467,6 +1786,15 @@ useEffect(() => {
         setEndUpValues(values);
       } catch (e) {
         console.warn('[PokerTable] end_up_updated handler failed', e);
+      }
+    })
+    .on('broadcast', { event: 'profits_calculated' }, (payload) => {
+      try {
+        console.log('[PokerTable][broadcast][profits_calculated] received', { tableId: table.id, gameId: payload?.payload?.gameId });
+        // Refresh summary data when profits are calculated
+        fetchSummaryData(table.id);
+      } catch (e) {
+        console.warn('[PokerTable] profits_calculated handler failed', e);
       }
     })
     .subscribe();
@@ -1536,7 +1864,12 @@ return (
                 )}
               </div>
               <div className="text-xs text-slate-300 text-right">
-                Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span>
+                <div>Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span></div>
+                {currentGame && (
+                  <div className="text-emerald-300 font-semibold">
+                    Game {currentGame.game_number}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1742,7 +2075,7 @@ return (
                         {Array.isArray(players) && players.map((p: any) => {
                           const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
                           const endUp = endUpValues[p.id] ?? 0;
-                          const profitDiv7 = ((endUp - totalBuyIns) / 7).toFixed(2);
+                          const profitDiv7 = calculatePlayerProfit(p.id, endUp, totalBuyIns).toFixed(2);
                           return (
                             <TableRow
                               key={p.id}
@@ -1761,7 +2094,7 @@ return (
                               <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
                                 padding: '4px 2px',
                                 height: 32,
-                                                                                              verticalAlign: 'middle',
+                                verticalAlign: 'middle',
                                 fontSize: '14px'
                               }}>
                                 {totalBuyIns}
@@ -1771,7 +2104,7 @@ return (
                                 textAlign: 'right',
                                 height: 32,
                                 verticalAlign: 'middle',
-                                                           }}>
+                              }}>
                                 <Input
                                   type="number"
                                   step="any"
@@ -1802,7 +2135,7 @@ return (
                         {(() => {
                           const totalBuyIns = players.reduce((sum, p) => sum + parseInt(String(playerTotals[p.id] ?? 0), 10), 0);
                           const totalEndUp = players.reduce((sum, p) => sum + (endUpValues[p.id] ?? 0), 0);
-                          const totalProfit = (totalEndUp - totalBuyIns) / 7;
+                          const totalProfit = calculatePlayerProfit('total', totalEndUp, totalBuyIns);
                           
                           return (
                             <TableRow className="border-t-2 border-emerald-500/50 bg-emerald-900/20">
@@ -1872,7 +2205,107 @@ return (
             )}
           </DialogFooter>
         </DialogContent>
-      </Dialog>              {/* Edit Profile button */}
+      </Dialog>
+
+              {/* Summary button - Available for all players */}
+              <Dialog open={openSummary} onOpenChange={setOpenSummary}>
+                <DialogTrigger asChild>
+                  <button
+                    onClick={() => fetchSummaryData(table?.id || '')}
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    aria-label="View game summary and profits"
+                  >
+                    <BarChart3 className="w-4 h-4" aria-hidden="true" />
+                    Summary
+                  </button>
+                </DialogTrigger>
+                <DialogContent
+                  className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-2xl"
+                  style={{ width: '600px', maxWidth: '90vw' }}
+                >
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
+                  </DialogHeader>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      flex: 1,
+                      overflowX: 'auto',
+                      overflowY: 'auto',
+                      padding: '0',
+                      minHeight: 0,
+                      maxHeight: '60vh'
+                    }}
+                  >
+                    <UITable>
+                      <TableHeader>
+                        <TableRow className="border-b border-gray-600/40">
+                          <TableHead className="text-slate-200 font-semibold text-sm text-left" style={{
+                            padding: '8px',
+                            whiteSpace: 'nowrap'
+                          }}>Player</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
+                            padding: '8px',
+                            whiteSpace: 'nowrap'
+                          }}>Total Profit</TableHead>
+                          {summaryData.length > 0 && summaryData[0].gameProfits.map((_, idx) => (
+                            <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-center" style={{
+                              padding: '8px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Game {summaryData[0].gameProfits[idx]?.gameNumber || idx + 1}
+                            </TableHead>
+                          ))}
+                          {summaryData.length === 0 && (
+                            <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
+                              padding: '8px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              No Games Yet
+                            </TableHead>
+                          )}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {summaryData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={100} className="text-center text-gray-400 py-8">
+                              No game data available yet. Complete a game to see profit summaries.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          summaryData.map((player, index) => (
+                            <TableRow key={index} className="border-b border-gray-700/40">
+                              <TableCell className="text-white font-medium text-sm" style={{ padding: '8px' }}>
+                                {player.playerName}
+                              </TableCell>
+                              <TableCell className={`font-mono text-sm text-center font-semibold ${player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
+                                {player.totalProfit >= 0 ? '+' : ''}{player.totalProfit.toFixed(2)}
+                              </TableCell>
+                              {player.gameProfits.map((gameProfit, gameIdx) => (
+                                <TableCell key={gameIdx} className={`font-mono text-sm text-center ${gameProfit.profit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
+                                  {gameProfit.profit >= 0 ? '+' : ''}{gameProfit.profit.toFixed(2)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </UITable>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setOpenSummary(false)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Edit Profile button */}
               <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                 <DialogTrigger asChild>
                   <button
@@ -1923,6 +2356,55 @@ return (
                   </form>
                 </DialogContent>
               </Dialog>
+
+              {/* Start New Game button - Admin only */}
+              {isAdmin && (
+                <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
+                  <DialogTrigger asChild>
+                    <button
+                      className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60"
+                      aria-label="Start a new game"
+                    >
+                      <Play className="w-4 h-4" aria-hidden="true" />
+                      Start New Game
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-black/90 backdrop-blur-md border-emerald-500/40 text-white max-w-sm w-80">
+                    <DialogHeader>
+                      <DialogTitle className="text-lg font-bold text-white">Start New Game</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 text-sm">
+                      <p className="text-gray-300 leading-relaxed">
+                        This will end the current game, calculate profits, and start a new game.
+                      </p>
+                      <p className="text-gray-300 text-sm leading-relaxed">
+                        All buy-ins and end-up values will be reset for the new game.
+                      </p>
+                      <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
+                        <p className="text-emerald-200 font-semibold">
+                          Current Game: {currentGame?.game_number || 'None'}
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setOpenStartNewGame(false)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleStartNewGame}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                        aria-label="Confirm start new game"
+                      >
+                        Start New Game
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
 
               {/* Exit Table button */}
               <Dialog open={openExit} onOpenChange={setOpenExit}>
@@ -1975,7 +2457,7 @@ return (
         {/* Admin Pending Requests */}
         {isAdmin && (pendingRequests.length > 0 || pendingJoinRequests.length > 0) && (
           <div className="bg-black/60 border border-red-500/40 rounded-lg py-3 px-3">
-            <h3 className="text-white text-sm font-semibold mb-2">Admin Actions</h3>
+            <h3 className="text-white text-sm font-semibold mb-2">Pending Requests</h3>
             
             {/* Buy-in requests */}
             {pendingRequests.map((r) => (
