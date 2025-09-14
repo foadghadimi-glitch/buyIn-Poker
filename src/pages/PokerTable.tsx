@@ -1469,19 +1469,30 @@ const handleSaveEndUp = async () => {
     }
 
     // Calculate and save profits for current game
+    // IMPORTANT: Calculate profits for ALL players based on participation in current game
+    // - Players who participated (have buy-ins OR end-up values): calculate actual profit
+    // - Players who didn't participate (no buy-ins AND no end-up values): set profit to zero
+    // This ensures correct summary totals regardless of player status (active/inactive)
     if (currentGame?.id) {
       try {
-        // Get all active players for this table
+        // Get ALL players for this table (both active and inactive)
         const { data: tablePlayers, error: playersError } = await supabase
           .from('table_players')
-          .select('player_id')
-          .eq('table_id', table.id)
-          .eq('status', 'active');
+          .select('player_id, status')
+          .eq('table_id', table.id);
         
         if (playersError) {
           console.warn('[PokerTable] handleSaveEndUp - failed to get table players:', playersError);
         } else if (tablePlayers && tablePlayers.length > 0) {
-          // Calculate profits for each player
+          const activePlayers = tablePlayers.filter(tp => tp.status === 'active');
+          const inactivePlayers = tablePlayers.filter(tp => tp.status === 'inactive');
+          console.log('[PokerTable] handleSaveEndUp - calculating profits for all players:', {
+            total: tablePlayers.length,
+            active: activePlayers.length,
+            inactive: inactivePlayers.length
+          });
+          
+          // Calculate profits for ALL players (active and inactive)
           for (const tp of tablePlayers) {
             const playerId = tp.player_id;
             
@@ -1497,9 +1508,36 @@ const handleSaveEndUp = async () => {
               continue;
             }
             
+            // Calculate profit based on whether player participated in current game
             const totalBuyIns = buyIns?.reduce((sum, bi) => sum + Number(bi.amount), 0) || 0;
             const endUpValue = Number(endUpValues[playerId] || 0);
-            const profit = calculatePlayerProfit(playerId, endUpValue, totalBuyIns);
+            
+            let profit = 0;
+            
+            // If player has buy-ins OR end-up values, they participated in this game
+            if (totalBuyIns > 0 || endUpValue > 0) {
+              // Player participated: calculate actual profit
+              profit = calculatePlayerProfit(playerId, endUpValue, totalBuyIns);
+              
+              console.log('[PokerTable] handleSaveEndUp - PARTICIPATED player profit calculation:', {
+                playerId,
+                status: tp.status,
+                totalBuyIns,
+                endUpValue,
+                profit
+              });
+            } else {
+              // Player didn't participate: set profit to zero
+              profit = 0;
+              
+              console.log('[PokerTable] handleSaveEndUp - NON-PARTICIPATED player profit (zero):', {
+                playerId,
+                status: tp.status,
+                totalBuyIns,
+                endUpValue,
+                profit
+              });
+            }
             
             // Save profit to game_profits table
             const { error: profitError } = await supabase
@@ -2169,249 +2207,249 @@ return (
         </DialogContent>
       </Dialog>
 
-      {/* Summary button - Available for all players */}
-      <Dialog open={openSummary} onOpenChange={setOpenSummary}>
-        <DialogTrigger asChild>
-          <button
-            onClick={() => fetchSummaryData(table?.id || '')}
-            className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-            aria-label="View game summary and profits"
-          >
-            <BarChart3 className="w-4 h-4" aria-hidden="true" />
-            Summary
-          </button>
-        </DialogTrigger>
-        <DialogContent
-          className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-2xl"
-          style={{ width: '600px', maxWidth: '90vw' }}
-        >
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
-          </DialogHeader>
-          <div
-            style={{
-              fontSize: '14px',
-              flex: 1,
-              overflowX: 'auto',
-              overflowY: 'auto',
-              padding: '0',
-              minHeight: 0,
-              maxHeight: '60vh'
-            }}
-          >
-            <UITable>
-              <TableHeader>
-                <TableRow className="border-b border-gray-600/40">
-                  <TableHead className="text-slate-200 font-semibold text-sm text-left" style={{
-                    padding: '8px',
-                    whiteSpace: 'nowrap'
-                  }}>Player</TableHead>
-                  <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
-                    padding: '8px',
-                    whiteSpace: 'nowrap'
-                  }}>Total Profit</TableHead>
-                  {summaryData.length > 0 && summaryData[0].gameProfits.map((_, idx) => (
-                    <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-center" style={{
-                      padding: '8px',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      Game {summaryData[0].gameProfits[idx]?.gameNumber || idx + 1}
-                    </TableHead>
-                  ))}
-                  {summaryData.length === 0 && (
-                    <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
-                      padding: '8px',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      No Games Yet
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summaryData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={100} className="text-center text-gray-400 py-8">
-                      No game data available yet. Complete a game to see profit summaries.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  summaryData.map((player, index) => (
-                    <TableRow key={index} className="border-b border-gray-700/40">
-                      <TableCell className="text-white font-medium text-sm" style={{ padding: '8px' }}>
-                        {player.playerName}
-                      </TableCell>
-                      <TableCell className={`font-mono text-sm text-center font-semibold ${player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
-                        {player.totalProfit >= 0 ? '+' : ''}{player.totalProfit.toFixed(2)}
-                      </TableCell>
-                      {player.gameProfits.map((gameProfit, gameIdx) => (
-                        <TableCell key={gameIdx} className={`font-mono text-sm text-center ${gameProfit.profit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
-                          {gameProfit.profit >= 0 ? '+' : ''}{gameProfit.profit.toFixed(2)}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </UITable>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setOpenSummary(false)}
-              className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {/* Summary button - Available for all players */}
+              <Dialog open={openSummary} onOpenChange={setOpenSummary}>
+                <DialogTrigger asChild>
+                  <button
+                    onClick={() => fetchSummaryData(table?.id || '')}
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    aria-label="View game summary and profits"
+                  >
+                    <BarChart3 className="w-4 h-4" aria-hidden="true" />
+                    Summary
+                  </button>
+                </DialogTrigger>
+                <DialogContent
+                  className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-2xl"
+                  style={{ width: '600px', maxWidth: '90vw' }}
+                >
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
+                  </DialogHeader>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      flex: 1,
+                      overflowX: 'auto',
+                      overflowY: 'auto',
+                      padding: '0',
+                      minHeight: 0,
+                      maxHeight: '60vh'
+                    }}
+                  >
+                    <UITable>
+                      <TableHeader>
+                        <TableRow className="border-b border-gray-600/40">
+                          <TableHead className="text-slate-200 font-semibold text-sm text-left" style={{
+                            padding: '8px',
+                            whiteSpace: 'nowrap'
+                          }}>Player</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
+                            padding: '8px',
+                            whiteSpace: 'nowrap'
+                          }}>Total Profit</TableHead>
+                          {summaryData.length > 0 && summaryData[0].gameProfits.map((_, idx) => (
+                            <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-center" style={{
+                              padding: '8px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              Game {summaryData[0].gameProfits[idx]?.gameNumber || idx + 1}
+                            </TableHead>
+                          ))}
+                          {summaryData.length === 0 && (
+                            <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
+                              padding: '8px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              No Games Yet
+                            </TableHead>
+                          )}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {summaryData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={100} className="text-center text-gray-400 py-8">
+                              No game data available yet. Complete a game to see profit summaries.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          summaryData.map((player, index) => (
+                            <TableRow key={index} className="border-b border-gray-700/40">
+                              <TableCell className="text-white font-medium text-sm" style={{ padding: '8px' }}>
+                                {player.playerName}
+                              </TableCell>
+                              <TableCell className={`font-mono text-sm text-center font-semibold ${player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
+                                {player.totalProfit >= 0 ? '+' : ''}{player.totalProfit.toFixed(2)}
+                              </TableCell>
+                              {player.gameProfits.map((gameProfit, gameIdx) => (
+                                <TableCell key={gameIdx} className={`font-mono text-sm text-center ${gameProfit.profit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
+                                  {gameProfit.profit >= 0 ? '+' : ''}{gameProfit.profit.toFixed(2)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </UITable>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setOpenSummary(false)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
-      {/* Edit Profile button */}
-      <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
-        <DialogTrigger asChild>
-          <button
-            className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-            onClick={() => {
-              setEditName(profile?.name || '');
-              setEditError('');
-              setOpenEditProfile(true);
-            }}
-            aria-label="Edit your profile name"
-          >
-            <Pencil className="w-4 h-4" aria-hidden="true" />
-            Edit Profile
-          </button>
-        </DialogTrigger>
-        <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">Edit Profile</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            handleEditProfileSubmit();
-          }}>
-            <div className="space-y-4">
-              <Label htmlFor="editName" className="text-sm font-semibold text-gray-300">New Name</Label>
-              <Input
-                id="editName"
-                value={editName}
-                onChange={handleEditNameChange}
-                className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
-                maxLength={30}
-                autoFocus
-              />
-              {editError && (
-                <div className="text-red-400 text-sm font-semibold mt-2">{editError}</div>
+              {/* Edit Profile button */}
+              <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
+                <DialogTrigger asChild>
+                  <button
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    onClick={() => {
+                      setEditName(profile?.name || '');
+                      setEditError('');
+                      setOpenEditProfile(true);
+                    }}
+                    aria-label="Edit your profile name"
+                  >
+                    <Pencil className="w-4 h-4" aria-hidden="true" />
+                    Edit Profile
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">Edit Profile</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    handleEditProfileSubmit();
+                  }}>
+                    <div className="space-y-4">
+                      <Label htmlFor="editName" className="text-sm font-semibold text-gray-300">New Name</Label>
+                      <Input
+                        id="editName"
+                        value={editName}
+                        onChange={handleEditNameChange}
+                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
+                        maxLength={30}
+                        autoFocus
+                      />
+                      {editError && (
+                        <div className="text-red-400 text-sm font-semibold mt-2">{editError}</div>
+                      )}
+                    </div>
+                    <DialogFooter className="mt-6">
+                      <Button
+                        type="submit"
+                        disabled={editSubmitting || !editName.trim()}
+                        className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/60"
+                        aria-label="Save profile changes"
+                      >
+                        {editSubmitting ? 'Saving...' : 'Save'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Start New Game button - Admin only */}
+              {isAdmin && (
+                <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
+                  <DialogTrigger asChild>
+                    <button
+                      className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60"
+                      aria-label="Start a new game"
+                    >
+                      <Play className="w-4 h-4" aria-hidden="true" />
+                      Start New Game
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-black/90 backdrop-blur-md border-emerald-500/40 text-white max-w-sm w-80">
+                    <DialogHeader>
+                      <DialogTitle className="text-lg font-bold text-white">Start New Game</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 text-sm">
+                      <p className="text-gray-300 leading-relaxed">
+                        This will end the current game, calculate profits, and start a new game.
+                      </p>
+                      <p className="text-gray-300 text-sm leading-relaxed">
+                        All buy-ins and end-up values will be reset for the new game.
+                      </p>
+                      <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
+                        <p className="text-emerald-200 font-semibold">
+                          Current Game: {currentGame?.game_number || 'None'}
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setOpenStartNewGame(false)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleStartNewGame}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                        aria-label="Confirm start new game"
+                      >
+                        Start New Game
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               )}
-            </div>
-            <DialogFooter className="mt-6">
-              <Button
-                type="submit"
-                disabled={editSubmitting || !editName.trim()}
-                className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/60"
-                aria-label="Save profile changes"
-              >
-                {editSubmitting ? 'Saving...' : 'Save'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
-      {/* Start New Game button - Admin only */}
-      {isAdmin && (
-        <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
-          <DialogTrigger asChild>
-            <button
-              className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60"
-              aria-label="Start a new game"
-            >
-              <Play className="w-4 h-4" aria-hidden="true" />
-              Start New Game
-            </button>
-          </DialogTrigger>
-          <DialogContent className="bg-black/90 backdrop-blur-md border-emerald-500/40 text-white max-w-sm w-80">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-white">Start New Game</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 text-sm">
-              <p className="text-gray-300 leading-relaxed">
-                This will end the current game, calculate profits, and start a new game.
-              </p>
-              <p className="text-gray-300 text-sm leading-relaxed">
-                All buy-ins and end-up values will be reset for the new game.
-              </p>
-              <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
-                <p className="text-emerald-200 font-semibold">
-                  Current Game: {currentGame?.game_number || 'None'}
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="secondary"
-                onClick={() => setOpenStartNewGame(false)}
-                className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleStartNewGame}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                aria-label="Confirm start new game"
-              >
-                Start New Game
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Exit Table button */}
-      <Dialog open={openExit} onOpenChange={setOpenExit}>
-        <DialogTrigger asChild>
-          <button
-            className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-            disabled={processingExit}
-            aria-label="Exit poker table"
-          >
-            <LogOut className="w-4 h-4" aria-hidden="true" />
-            Exit Table
-          </button>
-        </DialogTrigger>
-        <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 text-sm">
-            <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
-            <p className="text-gray-300 text-sm leading-relaxed">Click Yes to continue.</p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setOpenExit(false)}
-              disabled={processingExit}
-              className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                setOpenExit(false);
-                await handleExitGame();
-              }}
-              disabled={processingExit}
-              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
-              aria-label="Confirm exit from poker table"
-            >
-              Yes, Exit Table
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {/* Exit Table button */}
+              <Dialog open={openExit} onOpenChange={setOpenExit}>
+                <DialogTrigger asChild>
+                  <button
+                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    disabled={processingExit}
+                    aria-label="Exit poker table"
+                  >
+                    <LogOut className="w-4 h-4" aria-hidden="true" />
+                    Exit Table
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 text-sm">
+                    <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
+                    <p className="text-gray-300 text-sm leading-relaxed">Click Yes to continue.</p>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setOpenExit(false)}
+                      disabled={processingExit}
+                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={async () => {
+                        setOpenExit(false);
+                        await handleExitGame();
+                      }}
+                      disabled={processingExit}
+                      className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                      aria-label="Confirm exit from poker table"
+                    >
+                      Yes, Exit Table
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         )}

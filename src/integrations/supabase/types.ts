@@ -228,30 +228,6 @@ export type Database = {
         }
         Relationships: []
       }
-      table_endups: {
-        Row: {
-          endup: number
-          id: string
-          player_id: string
-          table_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          endup?: number
-          id?: string
-          player_id: string
-          table_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          endup?: number
-          id?: string
-          player_id?: string
-          table_id?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       table_players: {
         Row: {
           created_at: string | null
@@ -319,7 +295,6 @@ export type JoinRequest = Database["public"]["Tables"]["join_requests"]["Row"]
 export type Game = Database["public"]["Tables"]["games"]["Row"]
 export type GameProfit = Database["public"]["Tables"]["game_profits"]["Row"]
 export type EndUp = Database["public"]["Tables"]["end_ups"]["Row"]
-export type TableEndup = Database["public"]["Tables"]["table_endups"]["Row"]
 
 export const Constants = {
   public: {
