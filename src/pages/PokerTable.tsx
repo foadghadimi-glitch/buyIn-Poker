@@ -2211,38 +2211,54 @@ return (
                     <UITable>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="text-slate-200 font-semibold text-sm">Player</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 120, padding: '8px' }}>
+                            Player
+                          </TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 100, padding: '8px' }}>
+                            Total
+                          </TableHead>
                           {summaryData[0]?.gameNumbers.map((gameNum) => (
-                            <TableHead key={gameNum} className="text-slate-200 font-semibold text-sm text-right">
-                              Game {gameNum}
+                            <TableHead 
+                              key={gameNum} 
+                              className="text-slate-200 font-semibold text-xs text-right" 
+                              style={{ 
+                                minWidth: 70, 
+                                padding: '4px',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              G{gameNum}
                             </TableHead>
                           ))}
-                          <TableHead className="text-slate-200 font-semibold text-sm text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {summaryData.map((player, idx) => (
                           <TableRow key={idx}>
-                            <TableCell className="text-white font-medium text-sm">
+                            <TableCell className="text-white font-medium text-sm" style={{ padding: '8px' }}>
                               {player.playerName}
+                            </TableCell>
+                            <TableCell 
+                              className={`font-mono text-sm font-bold text-right ${
+                                player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
+                              }`}
+                              style={{ padding: '8px' }}
+                            >
+                              {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(2)}
                             </TableCell>
                             {player.gameResults.map((profit, gameIdx) => (
                               <TableCell 
                                 key={gameIdx} 
-                                className={`font-mono text-sm text-right ${
+                                className={`font-mono text-xs text-right ${
                                   profit === null ? 'text-gray-500' : 
                                   profit >= 0 ? 'text-emerald-300' : 'text-red-300'
                                 }`}
+                                style={{ padding: '4px' }}
                               >
-                                {profit === null ? 'N/A' : 
-                                 (profit >= 0 ? '+' : '') + profit.toFixed(2)}
+                                {profit === null ? '-' : 
+                                 (profit >= 0 ? '+' : '') + profit.toFixed(1)}
                               </TableCell>
                             ))}
-                            <TableCell className={`font-mono text-sm font-bold text-right ${
-                              player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
-                            }`}>
-                              {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(2)}
-                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
