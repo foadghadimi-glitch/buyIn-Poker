@@ -91,14 +91,19 @@ CREATE TABLE public.games (
 
 -- Game profits table - tracks profit per player per game
 CREATE TABLE public.game_profits (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  table_id uuid NOT NULL REFERENCES public.poker_tables(id) ON DELETE CASCADE,
-  game_id uuid NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
-  player_id uuid NOT NULL REFERENCES public.players(id) ON DELETE CASCADE,
-  profit numeric NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT game_profits_table_game_player_unique UNIQUE (table_id, game_id, player_id)
+    id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+    table_id uuid NOT NULL REFERENCES public.poker_tables(id) ON DELETE CASCADE,
+    game_id uuid NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
+    game_number integer NOT NULL,  -- NEW: Added this field
+    player_id uuid NOT NULL REFERENCES public.players(id) ON DELETE CASCADE,
+    profit numeric NOT NULL DEFAULT 0,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    CONSTRAINT game_profits_unique_per_game UNIQUE (table_id, game_id, player_id)
 );
+
+-- Add index for game_number queries
+CREATE INDEX idx_game_profits_game_number ON public.game_profits(table_id, game_number);
 
 -- === NEW: Helper function to check active table membership (used in RLS) ===
 CREATE OR REPLACE FUNCTION public.is_member_of_table(p_player_id uuid, p_table_id uuid)
@@ -452,7 +457,7 @@ DECLARE
   v_end_up_value numeric;
   v_profit numeric;
 BEGIN
-  -- Get game details
+  -- Get game details including game_number
   SELECT * INTO v_game_record
   FROM public.games
   WHERE id = p_game_id AND status = 'active';
@@ -467,7 +472,7 @@ BEGIN
   FOR v_player_record IN
     SELECT DISTINCT tp.player_id
     FROM public.table_players tp
-    WHERE tp.table_id = v_table_id AND tp.status = 'active'
+    WHERE tp.table_id = v_table_id
   LOOP
     -- Get total buy-ins for this player
     SELECT COALESCE(SUM(amount), 0) INTO v_total_buy_ins
@@ -479,14 +484,28 @@ BEGIN
     FROM public.end_ups
     WHERE table_id = v_table_id AND player_id = v_player_record.player_id;
     
-    -- Calculate profit (end_up - total_buy_ins)
-    v_profit := v_end_up_value - v_total_buy_ins;
+    -- Calculate profit (end_up - total_buy_ins) / 7
+    v_profit := (v_end_up_value - v_total_buy_ins) / 7;
     
-    -- Insert profit record
-    INSERT INTO public.game_profits (table_id, game_id, player_id, profit)
-    VALUES (v_table_id, p_game_id, v_player_record.player_id, v_profit)
+    -- Insert profit record with game_number
+    INSERT INTO public.game_profits (
+      table_id, 
+      game_id, 
+      game_number,  -- NEW: Include game_number
+      player_id, 
+      profit
+    )
+    VALUES (
+      v_table_id, 
+      p_game_id, 
+      v_game_record.game_number,  -- NEW: Use game_number from games table
+      v_player_record.player_id, 
+      v_profit
+    )
     ON CONFLICT (table_id, game_id, player_id)
-    DO UPDATE SET profit = EXCLUDED.profit;
+    DO UPDATE SET 
+      profit = EXCLUDED.profit,
+      game_number = EXCLUDED.game_number;
   END LOOP;
   
   -- Mark game as completed

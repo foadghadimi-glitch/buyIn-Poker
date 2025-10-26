@@ -1677,100 +1677,74 @@ const fetchCurrentGame = async (tableId: string) => {
 // NEW: Fetch summary data (profits per player per game)
 const fetchSummaryData = async (tableId: string) => {
   try {
-    // Fetch game_profits data (simple query without joins)
+    // 1. Fetch all profits data with game_number
     const { data: profits, error: profitsError } = await supabase
       .from('game_profits')
-      .select('*')
-      .eq('table_id', tableId);
-    
+      .select('game_number, player_id, profit')
+      .eq('table_id', tableId)
+      .order('game_number', { ascending: true });
+
     if (profitsError) {
       console.warn('[PokerTable] fetchSummaryData profits error:', profitsError);
-      // If no game_profits exist yet, show empty summary
       setSummaryData([]);
       return;
     }
-    
-    // If no profits data, show empty summary
-    if (!profits || profits.length === 0) {
-      setSummaryData([]);
-      return;
-    }
-    
-    // Get unique game_ids and player_ids
-    const gameIds = [...new Set(profits.map((p: any) => p.game_id))];
-    const playerIds = [...new Set(profits.map((p: any) => p.player_id))];
-    
-    // Fetch games data
-    const { data: games, error: gamesError } = await supabase
-      .from('games')
-      .select('id, game_number')
-      .in('id', gameIds)
-      .order('game_number', { ascending: true });
-    
-    if (gamesError) {
-      console.warn('[PokerTable] fetchSummaryData games error:', gamesError);
-      setSummaryData([]);
-      return;
-    }
-    
-    // Fetch players data
-    const { data: players, error: playersError } = await supabase
+
+    // 2. Get unique game numbers and player IDs
+    const gameNumbers = Array.from(new Set(profits?.map(p => p.game_number))).sort((a, b) => a - b);
+    const playerIds = Array.from(new Set(profits?.map(p => p.player_id)));
+
+    // 3. Fetch player names
+    const { data: players } = await supabase
       .from('players')
       .select('id, name')
       .in('id', playerIds);
-    
-    if (playersError) {
-      console.warn('[PokerTable] fetchSummaryData players error:', playersError);
-      setSummaryData([]);
-      return;
-    }
-    
-    // Create lookup maps
-    const gamesMap = new Map(games?.map((g: any) => [g.id, g.game_number]) || []);
-    const playersMap = new Map(players?.map((p: any) => [p.id, p.name]) || []);
-    
-    // If no games found, show empty summary
-    if (gamesMap.size === 0) {
-      setSummaryData([]);
-      return;
-    }
-    
-    // Group by player and calculate totals
-    const playerMap = new Map<string, {
+
+    const playerNames = new Map(players?.map(p => [p.id, p.name]) || []);
+
+    // 4. Build summary data with proper game number handling
+    const summaryMap = new Map<string, {
       playerName: string;
       totalProfit: number;
-      gameProfits: { gameNumber: number; profit: number }[];
+      gameResults: { [gameNumber: number]: number };
+      gameNumbers: number[];
     }>();
-    
-    profits.forEach((profit: any) => {
-      const playerId = profit.player_id;
-      const playerName = playersMap.get(playerId) || 'Unknown Player';
-      const gameNumber = gamesMap.get(profit.game_id) || 0;
-      const profitValue = Number(profit.profit);
-      
-      if (!playerMap.has(playerId)) {
-        playerMap.set(playerId, {
-          playerName,
-          totalProfit: 0,
-          gameProfits: []
-        });
+
+    // Initialize data structure for all players
+    playerIds.forEach(playerId => {
+      summaryMap.set(playerId, {
+        playerName: playerNames.get(playerId) || 'Unknown',
+        totalProfit: 0,
+        gameResults: {},
+        gameNumbers: gameNumbers
+      });
+    });
+
+    // Fill in profits where they exist
+    profits?.forEach(profit => {
+      const playerData = summaryMap.get(profit.player_id);
+      if (playerData) {
+        playerData.gameResults[profit.game_number] = profit.profit;
+        playerData.totalProfit += profit.profit;
       }
-      
-      const playerData = playerMap.get(playerId)!;
-      playerData.totalProfit += profitValue;
-      playerData.gameProfits.push({ gameNumber, profit: profitValue });
     });
-    
-    // Sort game profits by game number for each player
-    playerMap.forEach((playerData) => {
-      playerData.gameProfits.sort((a, b) => a.gameNumber - b.gameNumber);
-    });
-    
-    // Convert to array and sort by total profit descending
-    const summaryArray = Array.from(playerMap.values()).sort((a, b) => b.totalProfit - a.totalProfit);
+
+    // Convert to array and sort by total profit
+    const summaryArray = Array.from(summaryMap.values())
+      .sort((a, b) => b.totalProfit - a.totalProfit)
+      .map(player => ({
+        ...player,
+        // Ensure all game numbers have a value (0 or null for games not played)
+        gameResults: gameNumbers.map(gameNum => 
+          player.gameResults[gameNum] !== undefined ? player.gameResults[gameNum] : null
+        )
+      }));
+
     setSummaryData(summaryArray);
+
   } catch (e) {
     console.warn('[PokerTable] fetchSummaryData exception:', e);
+    setSummaryData([]);
   }
 };
 
@@ -2229,67 +2203,48 @@ return (
                   <div
                     style={{
                       fontSize: '14px',
-                      flex: 1,
                       overflowX: 'auto',
                       overflowY: 'auto',
-                      padding: '0',
-                      minHeight: 0,
                       maxHeight: '60vh'
                     }}
                   >
                     <UITable>
                       <TableHeader>
-                        <TableRow className="border-b border-gray-600/40">
-                          <TableHead className="text-slate-200 font-semibold text-sm text-left" style={{
-                            padding: '8px',
-                            whiteSpace: 'nowrap'
-                          }}>Player</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
-                            padding: '8px',
-                            whiteSpace: 'nowrap'
-                          }}>Total Profit</TableHead>
-                          {summaryData.length > 0 && summaryData[0].gameProfits.map((_, idx) => (
-                            <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-center" style={{
-                              padding: '8px',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              Game {summaryData[0].gameProfits[idx]?.gameNumber || idx + 1}
+                        <TableRow>
+                          <TableHead className="text-slate-200 font-semibold text-sm">Player</TableHead>
+                          {summaryData[0]?.gameNumbers.map((gameNum) => (
+                            <TableHead key={gameNum} className="text-slate-200 font-semibold text-sm text-right">
+                              Game {gameNum}
                             </TableHead>
                           ))}
-                          {summaryData.length === 0 && (
-                            <TableHead className="text-slate-200 font-semibold text-sm text-center" style={{
-                              padding: '8px',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              No Games Yet
-                            </TableHead>
-                          )}
+                          <TableHead className="text-slate-200 font-semibold text-sm text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {summaryData.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={100} className="text-center text-gray-400 py-8">
-                              No game data available yet. Complete a game to see profit summaries.
+                        {summaryData.map((player, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="text-white font-medium text-sm">
+                              {player.playerName}
+                            </TableCell>
+                            {player.gameResults.map((profit, gameIdx) => (
+                              <TableCell 
+                                key={gameIdx} 
+                                className={`font-mono text-sm text-right ${
+                                  profit === null ? 'text-gray-500' : 
+                                  profit >= 0 ? 'text-emerald-300' : 'text-red-300'
+                                }`}
+                              >
+                                {profit === null ? 'N/A' : 
+                                 (profit >= 0 ? '+' : '') + profit.toFixed(2)}
+                              </TableCell>
+                            ))}
+                            <TableCell className={`font-mono text-sm font-bold text-right ${
+                              player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
+                            }`}>
+                              {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(2)}
                             </TableCell>
                           </TableRow>
-                        ) : (
-                          summaryData.map((player, index) => (
-                            <TableRow key={index} className="border-b border-gray-700/40">
-                              <TableCell className="text-white font-medium text-sm" style={{ padding: '8px' }}>
-                                {player.playerName}
-                              </TableCell>
-                              <TableCell className={`font-mono text-sm text-center font-semibold ${player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
-                                {player.totalProfit >= 0 ? '+' : ''}{player.totalProfit.toFixed(2)}
-                              </TableCell>
-                              {player.gameProfits.map((gameProfit, gameIdx) => (
-                                <TableCell key={gameIdx} className={`font-mono text-sm text-center ${gameProfit.profit >= 0 ? 'text-emerald-300' : 'text-red-300'}`} style={{ padding: '8px' }}>
-                                  {gameProfit.profit >= 0 ? '+' : ''}{gameProfit.profit.toFixed(2)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))
-                        )}
+                        ))}
                       </TableBody>
                     </UITable>
                   </div>
