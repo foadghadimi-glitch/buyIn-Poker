@@ -139,9 +139,22 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleEndUpChange = (playerId: string, value: number) => {
-    setEndUpValues(prev => ({ ...prev, [playerId]: value }));
-  };
+const handleEndUpChange = (playerId: string, raw: string) => {
+  // Allow the field to be blank; don't force 0
+  if (raw === '' || raw === null) {
+    setEndUpValues(prev => {
+      const next = { ...prev };
+      delete next[playerId]; // remove to keep the cell empty
+      return next;
+    });
+    return;
+  }
+  const num = Number(raw);
+  setEndUpValues(prev => ({
+    ...prev,
+    [playerId]: isNaN(num) ? undefined as unknown as number : num
+  }));
+};
 
   // NEW: fetch admin name (used by refreshTableData + fallback effect)
   const fetchAdminName = async (tableId: string) => {
@@ -1432,9 +1445,13 @@ const calculatePlayerProfit = (playerId: string, endUpValue: number, totalBuyIns
 
 // REPLACE: Admin action now persists to DB and broadcasts
 const handleSaveEndUp = async () => {
-  if (!table?.id || !currentGame?.id) return;
+  if (!table?.id || !currentGame?.id) {
+    toast.error('No active game found');
+    return;
+  }
+
   try {
-    // Prepare rows for upsert: one row per player with numeric value
+    // Save end-up values first
     const rows = Object.keys(endUpValues).map(pid => ({
       table_id: table.id,
       player_id: pid,
@@ -1443,150 +1460,90 @@ const handleSaveEndUp = async () => {
     }));
 
     if (rows.length > 0) {
-      // Try to upsert, but handle if table doesn't exist
-      try {
-        const { error } = await (supabase as any)
-          .from('end_ups')
-          .upsert(rows, { onConflict: 'table_id,player_id' });
-        if (error) {
-          console.warn('[PokerTable] handleSaveEndUp - end_ups may not exist:', error);
-          toast.error('End-up values feature not available yet.');
-          return;
-        }
-      } catch (e) {
-        console.warn('[PokerTable] handleSaveEndUp - end_ups table not found:', e);
-        toast.error('End-up values feature not available yet.');
+      const { error: endUpError } = await supabase
+        .from('end_ups')
+        .upsert(rows, { onConflict: 'table_id,player_id' });
+      
+      if (endUpError) {
+        console.error('[PokerTable] handleSaveEndUp - end_ups error:', endUpError);
+        toast.error('Failed to save end-up values.');
         return;
       }
-    } else {
-      // If admin cleared all values locally, try to delete persisted rows for this table
-      try {
-        await (supabase as any).from('end_ups').delete().eq('table_id', table.id);
-      } catch (e) { 
-        console.warn('[PokerTable] handleSaveEndUp delete - table may not exist:', e);
-        // ignore if table doesn't exist
-      }
     }
 
-    // Calculate and save profits for current game
-    // IMPORTANT: Calculate profits for ALL players based on participation in current game
-    // - Players who participated (have buy-ins OR end-up values): calculate actual profit
-    // - Players who didn't participate (no buy-ins AND no end-up values): set profit to zero
-    // This ensures correct summary totals regardless of player status (active/inactive)
-    if (currentGame?.id) {
-      try {
-        // Get ALL players for this table (both active and inactive)
-        const { data: tablePlayers, error: playersError } = await supabase
-          .from('table_players')
-          .select('player_id, status')
-          .eq('table_id', table.id);
-        
-        if (playersError) {
-          console.warn('[PokerTable] handleSaveEndUp - failed to get table players:', playersError);
-        } else if (tablePlayers && tablePlayers.length > 0) {
-          const activePlayers = tablePlayers.filter(tp => tp.status === 'active');
-          const inactivePlayers = tablePlayers.filter(tp => tp.status === 'inactive');
-          console.log('[PokerTable] handleSaveEndUp - calculating profits for all players:', {
-            total: tablePlayers.length,
-            active: activePlayers.length,
-            inactive: inactivePlayers.length
-          });
-          
-          // Calculate profits for ALL players (active and inactive)
-          for (const tp of tablePlayers) {
-            const playerId = tp.player_id;
-            
-            // Get total buy-ins for this player
-            const { data: buyIns, error: buyInsError } = await supabase
-              .from('buy_ins')
-              .select('amount')
-              .eq('table_id', table.id)
-              .eq('player_id', playerId);
-            
-            if (buyInsError) {
-              console.warn('[PokerTable] handleSaveEndUp - failed to get buy-ins for player:', playerId, buyInsError);
-              continue;
-            }
-            
-            // Calculate profit based on whether player participated in current game
-            const totalBuyIns = buyIns?.reduce((sum, bi) => sum + Number(bi.amount), 0) || 0;
-            const endUpValue = Number(endUpValues[playerId] || 0);
-            
-            let profit = 0;
-            
-            // If player has buy-ins OR end-up values, they participated in this game
-            if (totalBuyIns > 0 || endUpValue > 0) {
-              // Player participated: calculate actual profit
-              profit = calculatePlayerProfit(playerId, endUpValue, totalBuyIns);
-              
-              console.log('[PokerTable] handleSaveEndUp - PARTICIPATED player profit calculation:', {
-                playerId,
-                status: tp.status,
-                totalBuyIns,
-                endUpValue,
-                profit
-              });
-            } else {
-              // Player didn't participate: set profit to zero
-              profit = 0;
-              
-              console.log('[PokerTable] handleSaveEndUp - NON-PARTICIPATED player profit (zero):', {
-                playerId,
-                status: tp.status,
-                totalBuyIns,
-                endUpValue,
-                profit
-              });
-            }
-            
-            // Save profit to game_profits table
-            const { error: profitError } = await supabase
-              .from('game_profits')
-              .upsert({
-                table_id: table.id,
-                game_id: currentGame.id,
-                player_id: playerId,
-                profit: profit
-              }, {
-                onConflict: 'table_id,game_id,player_id'
-              });
-            
-            if (profitError) {
-              console.warn('[PokerTable] handleSaveEndUp - failed to save profit for player:', playerId, profitError);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[PokerTable] handleSaveEndUp - failed to calculate profits:', e);
-      }
+    // Get all players for this table
+    const { data: tablePlayers, error: playersError } = await supabase
+      .from('table_players')
+      .select('player_id, status')
+      .eq('table_id', table.id);
+    
+    if (playersError) {
+      console.error('[PokerTable] handleSaveEndUp - failed to get table players:', playersError);
+      return;
     }
 
-    // Broadcast so other clients update quickly (they listen for end_up_updated)
-    try {
-      await supabase
-        .channel('table_' + table.id)
-        .send({
-          type: 'broadcast',
-          event: 'end_up_updated',
-          payload: { endUpValues }
-        });
+    // Calculate and save profits for each player
+    for (const tp of tablePlayers || []) {
+      const playerId = tp.player_id;
       
-      // Also broadcast that profits were calculated
-      await supabase
-        .channel('table_' + table.id)
-        .send({
-          type: 'broadcast',
-          event: 'profits_calculated',
-          payload: { gameId: currentGame?.id }
+      // Get total buy-ins for this player
+      const { data: buyIns } = await supabase
+        .from('buy_ins')
+        .select('amount')
+        .eq('table_id', table.id)
+        .eq('player_id', playerId);
+      
+      const totalBuyIns = buyIns?.reduce((sum, bi) => sum + Number(bi.amount), 0) || 0;
+      const endUpValue = Number(endUpValues[playerId] || 0);
+      
+      // Calculate profit
+      const profit = calculatePlayerProfit(playerId, endUpValue, totalBuyIns);
+      
+      // Save profit with game_number
+      const profitRow = {
+        table_id: table.id,
+        game_id: currentGame.id,
+        game_number: currentGame.game_number, // Add game_number from currentGame
+        player_id: playerId,
+        profit: profit,
+        created_at: new Date().toISOString()
+      };
+
+      const { error: profitError } = await supabase
+        .from('game_profits')
+        .upsert(profitRow, {
+          onConflict: 'table_id,game_id,player_id'
         });
-    } catch (e) {
-      console.warn('[PokerTable] handleSaveEndUp broadcast failed (ignored)', e);
+
+      if (profitError) {
+        console.error('[PokerTable] handleSaveEndUp - failed to save profit:', profitError);
+      }
     }
 
-    toast.success('End-up values saved! Profits calculated and available in Summary.');
+    // Broadcast updates
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'end_up_updated',
+        payload: { endUpValues }
+      });
+    
+    await supabase
+      .channel('table_' + table.id)
+      .send({
+        type: 'broadcast',
+        event: 'profits_calculated',
+        payload: { gameId: currentGame.id }
+      });
+
+    toast.success('End-up values and profits saved successfully!');
+    await fetchSummaryData(table.id);
+    setOpenEndUp(false);
+
   } catch (e) {
-    console.error('[PokerTable] handleSaveEndUp failed', e);
-    toast.error('Failed to save end-up values.');
+    console.error('[PokerTable] handleSaveEndUp failed:', e);
+    toast.error('Failed to save end-up values and profits.');
   }
 };
 
@@ -1805,16 +1762,13 @@ return (
       backgroundRepeat: 'no-repeat'
     } : undefined}
   >
-    {/* Dark overlay for background image - semi-transparent */}
     {showBackground && (
       <div className="absolute inset-0 bg-black/75 pointer-events-none" style={{ zIndex: 1 }} />
     )}
     
-    {/* Main content - positioned above overlay */}
     <div className="relative h-full flex flex-col pt-safe pb-safe px-3" style={{ zIndex: 10 }}>
-      {/* Zone 1: Header + Actions (auto height, compact) */}
+      {/* Header Section */}
       <div className="flex-shrink-0 space-y-3">
-        {/* Header */}
         <div className="rounded-2xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-4">
           <div className="flex flex-col gap-3">
             <h1 className="text-xl font-bold tracking-tight text-white truncate text-center">
@@ -1824,21 +1778,20 @@ return (
               <div className="relative">
                 <button
                   onClick={handleCopyJoinCode}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 shadow-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition"
                   title="Copy join code"
-                  aria-label={`Copy join code: ${normalizedJoinCode}`}
                 >
                   <span>{normalizedJoinCode}</span>
                   <Copy className="w-3.5 h-3.5" />
                 </button>
                 {copied && (
-                  <div role="status" className="absolute -bottom-9 left-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md shadow-lg z-20">
+                  <div className="absolute -bottom-9 left-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md">
                     Copied!
                   </div>
                 )}
               </div>
               <div className="text-xs text-slate-300 text-right">
-                <div>Admin: <span className="font-semibold text-white">{adminName || table.adminName || 'Loading...'}</span></div>
+                <div>Admin: <span className="font-semibold text-white">{adminName}</span></div>
                 {currentGame && (
                   <div className="text-emerald-300 font-semibold">
                     Game {currentGame.game_number}
@@ -1848,7 +1801,7 @@ return (
             </div>
           </div>
         </div>
-
+        
         {/* Spectator Back to Selection */}
         {!isPlayerOnTable && !pendingJoinPlayerIds.has(profile?.id || '') && (
           <div className="py-3 px-3 border rounded-lg bg-black/60 border-emerald-700/30">
@@ -1882,7 +1835,7 @@ return (
               </DialogTrigger>
               <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
                 <DialogHeader>
-                  <DialogTitle className="text-lg font-bold text-white">Request Buy-in</DialogTitle>
+                  <DialogTitle className="text-lg fontbold text-white">Request Buy-in</DialogTitle>
                 </DialogHeader>
                 <form
                   onSubmit={e => {
@@ -2082,6 +2035,7 @@ return (
                                 <Input
                                   type="number"
                                   step="any"
+                                  inputMode="decimal"
                                   disabled={!isAdmin}
                                   className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs font-mono text-right"
                                   style={{
@@ -2090,8 +2044,8 @@ return (
                                     fontSize: '16px',
                                     padding: '2px 6px'
                                   }}
-                                  value={endUp}
-                                  onChange={e => handleEndUpChange(p.id, parseFloat(e.target.value || '0'))}
+                                  value={endUpValues[p.id] ?? ''}               // show empty instead of 0
+                                  onChange={(e) => handleEndUpChange(p.id, e.target.value)}  // pass raw string
                                 />
                               </TableCell>
                               <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
@@ -2756,13 +2710,5 @@ return (
   </div>
   );
 };
-
-/*
-  The request for a buy-in that is not approved yet is maintained in the table:
-    buy_in_requests
-
-  The approved points information is maintained in the table:
-    buy_ins
-*/
 
 export default PokerTable;
