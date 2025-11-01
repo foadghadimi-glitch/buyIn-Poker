@@ -1505,8 +1505,7 @@ const handleSaveEndUp = async () => {
         game_id: currentGame.id,
         game_number: currentGame.game_number, // Add game_number from currentGame
         player_id: playerId,
-        profit: profit,
-        created_at: new Date().toISOString()
+        profit: profit
       };
 
       const { error: profitError } = await supabase

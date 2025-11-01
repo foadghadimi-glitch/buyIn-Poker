@@ -1,0 +1,7 @@
+{
+  "appId": "com.buyinblitz.app",
+  "appName": "Buy In Blitz",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
+
