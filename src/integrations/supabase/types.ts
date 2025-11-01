@@ -175,6 +175,7 @@ export type Database = {
         Row: {
           id: string
           game_id: string
+          game_number: number
           table_id: string
           player_id: string
           profit: number
@@ -184,6 +185,7 @@ export type Database = {
         Insert: {
           id?: string
           game_id: string
+          game_number: number
           table_id: string
           player_id: string
           profit?: number
@@ -193,6 +195,7 @@ export type Database = {
         Update: {
           id?: string
           game_id?: string
+          game_number?: number
           table_id?: string
           player_id?: string
           profit?: number

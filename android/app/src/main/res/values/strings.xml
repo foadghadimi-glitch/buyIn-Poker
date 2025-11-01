@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Buy In Blitz</string>
+    <string name="title_activity_main">Buy In Blitz</string>
+    <string name="package_name">com.buyinblitz.app</string>
+    <string name="custom_url_scheme">com.buyinblitz.app</string>
+</resources>
