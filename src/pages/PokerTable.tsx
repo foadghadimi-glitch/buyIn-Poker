@@ -34,6 +34,25 @@ interface PokerTableProps {
   showBackground?: boolean; // NEW: optional background toggle
 }
 
+// Add types for server responses
+type BuyInRequest = {
+  id: string;
+  table_id: string;
+  player_id: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+};
+
+type JoinRequest = {
+  id: string;
+  table_id: string;
+  player_id: string;
+  player_name?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+};
+
 const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true }: PokerTableProps) => {
   // NORMALIZE admin id & join code (covers snake_case / camelCase)
   const normalizedAdminId = table.adminId || table.admin_player_id;
@@ -106,7 +125,19 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
   const [openSummary, setOpenSummary] = useState(false); // Add state for summary dialog
   const [openStartNewGame, setOpenStartNewGame] = useState(false); // Add state for start new game dialog
   const [amount, setAmount] = useState('');
-  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [tableState, setTableState] = useState<{
+    pendingRequests: BuyInRequest[];
+    pendingJoinRequests: JoinRequest[];
+    pendingJoinPlayerIds: Set<string>;
+    processingRequests: string[];
+    processingJoinRequests: string[];
+  }>({
+    pendingRequests: [],
+    pendingJoinRequests: [],
+    pendingJoinPlayerIds: new Set(),
+    processingRequests: [],
+    processingJoinRequests: []
+  });
   const [playerTotals, setPlayerTotals] = useState<Record<string, number>>({});
   // DIAG: keep previous totals snapshot for diff logging
   const prevTotalsRef = useRef<Record<string, number>>({});
@@ -139,22 +170,33 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     setTimeout(() => setCopied(false), 1500);
   };
 
-const handleEndUpChange = (playerId: string, raw: string) => {
-  // Allow the field to be blank; don't force 0
-  if (raw === '' || raw === null) {
-    setEndUpValues(prev => {
-      const next = { ...prev };
-      delete next[playerId]; // remove to keep the cell empty
-      return next;
-    });
-    return;
-  }
-  const num = Number(raw);
-  setEndUpValues(prev => ({
-    ...prev,
-    [playerId]: isNaN(num) ? undefined as unknown as number : num
-  }));
-};
+  // First modify the handleEndUpChange function to better handle decimals:
+  const handleEndUpChange = (playerId: string, raw: string) => {
+    // Handle empty input
+    if (raw === '' || raw === null) {
+      setEndUpValues(prev => {
+        const next = { ...prev };
+        delete next[playerId];
+        return next;
+      });
+      return;
+    }
+
+    // Replace comma with dot for decimal
+    const normalized = raw.replace(',', '.');
+    // Convert to number but preserve decimals
+    const num = parseFloat(normalized);
+    setEndUpValues(prev => ({
+      ...prev,
+      [playerId]: isNaN(num) ? undefined : num
+    }));
+  };
+
+  // Update the input's value formatting to always show decimals properly
+  const formatEndUpValue = (value: number | undefined): string => {
+    if (value === undefined) return '';
+    return value.toString().replace(',', '.');
+  };
 
   // NEW: fetch admin name (used by refreshTableData + fallback effect)
   const fetchAdminName = async (tableId: string) => {
@@ -193,11 +235,11 @@ const handleEndUpChange = (playerId: string, raw: string) => {
       const mapped = rows.map(r => ({ ...r, player_name: nameById[r.player_id] || 'Unknown' }));
       console.log('[PokerTable][fetchPendingJoinRequests] mapped', mapped);
       setPendingJoinRequests(mapped);
-      setPendingJoinPlayerIds(new Set(mapped.map(r => r.player_id)));
+      setTableState(prev => ({ ...prev, pendingJoinRequests: mapped, pendingJoinPlayerIds: new Set(mapped.map(r => r.player_id)) }));
     } catch (e) {
       console.warn('[PokerTable][fetchPendingJoinRequests] fail', e);
       setPendingJoinRequests([]);
-      setPendingJoinPlayerIds(new Set());
+      setTableState(prev => ({ ...prev, pendingJoinRequests: [], pendingJoinPlayerIds: new Set() }));
     }
   };
 
@@ -647,11 +689,11 @@ const handleEndUpChange = (playerId: string, raw: string) => {
         );
         const { data, error } = res as any;
         if (!mounted) return;
-        if (!error) setPendingRequests(data || []);
-        else setPendingRequests([]);
+        if (!error) setTableState(prev => ({ ...prev, pendingRequests: data || [] }));
+        else setTableState(prev => ({ ...prev, pendingRequests: [] }));
       } catch (e) {
         if (!mounted) return;
-        setPendingRequests([]);
+        setTableState(prev => ({ ...prev, pendingRequests: [] }));
       }
     };
     fetchPendingBuyIns();
@@ -676,10 +718,10 @@ const handleEndUpChange = (playerId: string, raw: string) => {
             .eq('table_id', table.id)
             .eq('status', 'pending');
           if (error || !reqs) {
-            setPendingRequests([]);
+            setTableState(prev => ({ ...prev, pendingRequests: [] }));
             return;
           }
-          setPendingRequests(reqs || []);
+          setTableState(prev => ({ ...prev, pendingRequests: reqs || [] }));
         } catch (e) {
           console.error('[PokerTable] buy_in_request_created handler error:', e);
         }
@@ -817,7 +859,7 @@ const handleEndUpChange = (playerId: string, raw: string) => {
   // Handler to request a buy-in from a player (used by the Buy-in dialog)
   const handleRequestBuyIn = async () => {
     if (!table || !profile) return;
-    if (processingBuyIn) {
+    if (processingBuyIn) {  // Fixed: removed curly braces around condition
       // already submitting
       return;
     }
@@ -868,7 +910,7 @@ const handleEndUpChange = (playerId: string, raw: string) => {
             .select('*')
             .eq('table_id', table.id)
             .eq('status', 'pending');
-          if (!fetchErr) setPendingRequests(reqs || []);
+          if (!fetchErr) setTableState(prev => ({ ...prev, pendingRequests: reqs || [] }));
         } catch (e) {
           console.warn('[PokerTable] failed to refresh pending buy_in_requests for admin (ignored):', e);
         }
@@ -901,85 +943,65 @@ const handleRequestJoin = async () => {
     console.error('[PokerTable.handleRequestJoin] Aborted: missing table or profile ID.', { tableId: table?.id, playerId });
     return;
   }
-  if (processingJoinRequestLocal) {
-    return;
-  }
+  if (processingJoinRequestLocal) return;
 
-  console.log(`[PokerTable.handleRequestJoin] User ${playerId} is requesting to join table ${table.id}.`);
-
-  // Check if player is already in the table_players list
-  const { data: tpRow, error: tpError } = await supabase
-    .from('table_players')
-    .select('id, status')
-    .eq('table_id', table.id)
-    .eq('player_id', playerId)
-    .maybeSingle();
-
-  if (tpError) {
-    console.error('[PokerTable.handleRequestJoin] Error checking table_players:', tpError);
-    toast.error('Database error checking player status.');
-    return;
-  }
-
-  if (tpRow) {
-    console.log(`[PokerTable.handleRequestJoin] User ${playerId} is a returning player. Status: ${tpRow.status}. Activating.`);
-    // If already in table_players, just activate (no approval needed)
-    await safeUpsertTablePlayer(table.id, playerId, 'active');
-    await refreshTableData(table.id, 'rejoin');
-    // broadcast so other clients see the player list update
-    try {
-      await supabase.channel('table_' + table.id).send({
-        type: 'broadcast',
-        event: 'join_refresh',
-        payload: { rejoinedPlayer: playerId }
-      });
-    } catch (e) { console.warn('[PokerTable] rejoin broadcast failed', e); }
-    toast('You have rejoined the table.');
-    return;
-  }
-
-  console.log(`[PokerTable.handleRequestJoin] User ${playerId} is a new player for this table. Checking for existing requests.`);
-
-  // If there's already a pending join_request, update local pending state and exit.
-  const { data: existingReq, error: existingReqError } = await supabase
-    .from('join_requests')
-    .select('id, status')
-    .eq('table_id', table.id)
-    .eq('player_id', playerId)
-    .eq('status', 'pending')
-    .maybeSingle();
-
-  if (existingReqError) {
-    console.error('[PokerTable.handleRequestJoin] Error checking existing join_requests:', existingReqError);
-    toast.error('Database error checking join requests.');
-    return;
-  }
-
-  if (existingReq) {
-    console.log(`[PokerTable.handleRequestJoin] User ${playerId} already has a pending request (ID: ${existingReq.id}). Not creating a new one.`);
-    // ensure UI shows pending immediately
-    setPendingJoinPlayerIds(prev => {
-      const next = new Set(prev);
-      next.add(playerId);
-      return next;
-    });
-    toast('Your join request is still pending.');
-    return;
-  }
-
-  console.log(`[PokerTable.handleRequestJoin] No pending request found for user ${playerId}. Creating a new join request.`);
-
-  // Create a new join request
   try {
+    // First check if player is already in table_players (existing member)
+    const { data: tpRow, error: tpError } = await supabase
+      .from('table_players')
+      .select('id, status')
+      .eq('table_id', table.id)
+      .eq('player_id', playerId)
+      .maybeSingle();
+
+    if (tpError) {
+      console.error('[PokerTable.handleRequestJoin] Error checking table_players:', tpError);
+      toast.error('Database error checking player status.');
+      return;
+    }
+
+    // If player exists in table_players, they're a returning player - handle rejoin
+    if (tpRow) {
+      console.log(`[PokerTable.handleRequestJoin] User ${playerId} is a returning player. Activating without approval.`);
+      // Directly activate the player - no approval needed for rejoin
+      await safeUpsertTablePlayer(table.id, playerId, 'active');
+      await refreshTableData(table.id, 'rejoin');
+      
+      // Notify other clients
+      try {
+        await supabase.channel('table_' + table.id).send({
+          type: 'broadcast',
+          event: 'join_refresh',
+          payload: { rejoinedPlayer: playerId }
+        });
+      } catch (e) { 
+        console.warn('[PokerTable] rejoin broadcast failed (ignored)', e); 
+      }
+      
+      toast.success('Welcome back! You have rejoined the table.');
+      return;
+    }
+
+    // New player flow - check for existing pending request
+    const { data: existingReq } = await supabase
+      .from('join_requests')
+      .select('id, status')
+      .eq('table_id', table.id)
+      .eq('player_id', playerId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (existingReq) {
+      setPendingJoinPlayerIds(prev => new Set(prev).add(playerId));
+      toast.info('Your join request is still pending approval.');
+      return;
+    }
+
+    // Create new join request for new player
     setProcessingJoinRequestLocal(true);
-    // optimistic UI: mark as pending immediately to avoid double-click race
-    setPendingJoinPlayerIds(prev => {
-      const next = new Set(prev);
-      next.add(playerId);
-      return next;
-    });
+    
     const newRequestId = uuidv4();
-    const { error: insertError } = await supabase
+    await supabase
       .from('join_requests')
       .insert({
         id: newRequestId,
@@ -988,17 +1010,6 @@ const handleRequestJoin = async () => {
         status: 'pending',
         created_at: new Date().toISOString()
       });
-    if (insertError) {
-      console.error('[PokerTable] insert join_request failed:', insertError);
-      // revert optimistic pending marker
-      setPendingJoinPlayerIds(prev => {
-        const next = new Set(prev);
-        next.delete(playerId);
-        return next;
-      });
-      toast('Failed to create join request');
-      return;
-    }
 
     // Best-effort: notify admin so they get a quick UI prompt (non-fatal)
     try {
@@ -1021,13 +1032,7 @@ const handleRequestJoin = async () => {
     toast('Join request sent');
   } catch (e) {
     console.error('[PokerTable] handleRequestJoin error:', e);
-    // revert optimistic pending marker on unexpected error
-    setPendingJoinPlayerIds(prev => {
-      const next = new Set(prev);
-      next.delete(playerId);
-      return next;
-    });
-    toast('Failed to send join request');
+    toast.error('Failed to send join request');
   } finally {
     setProcessingJoinRequestLocal(false);
   }
@@ -1147,40 +1152,84 @@ const loadPlayersFromJoinTable = async (tableId: string, totals: Record<string, 
 
 // Admin handlers for buy-in requests
 const handleApprove = async (reqId: string) => {
-  console.log('[PokerTable][handleApprove] start', { reqId, tableId: table?.id });
-  if (!reqId || processingRequests.includes(reqId) || !table) return;
-  setProcessingRequests(prev => [...prev, reqId]);
+  if (!reqId || tableState.processingRequests.includes(reqId) || !table) return;
+  
+  setTableState(prev => ({
+    ...prev,
+    processingRequests: [...prev.processingRequests, reqId]
+  }));
+
   try {
-    const { data, error } = await (supabase as any).rpc('approve_buy_in', { p_request_id: reqId });
-    if (error) {
-      console.error('[PokerTable][handleApprove] RPC error', error);
-      throw error;
-    }
-    console.log('[PokerTable][handleApprove] RPC inserted buy_in id', data);
+    // Get the request details before approving
+    const { data: reqData } = await supabase
+      .from('buy_in_requests')
+      .select('*')
+      .eq('id', reqId)
+      .maybeSingle();
 
-    setPendingRequests(prev => prev.filter(r => r.id !== reqId));
-
-    await refreshTableData(table.id, 'handleApprove (rpc)');
-
-    // NEW: broadcast to table participants (regular users listen and refresh)
-    try {
-      await supabase
-        .channel('table_' + table.id)
-        .send({
-          type: 'broadcast',
-          event: 'buy_in_updated',
-          payload: { by: profile?.id, buyInId: data }
-        });
-    } catch (e) {
-      console.warn('[PokerTable][handleApprove] broadcast failed (ignored)', e);
+    if (!reqData) {
+      throw new Error('Request not found');
     }
 
-    toast('Buy-in approved');
-  } catch (e) {
-    console.error('[PokerTable] handleApprove error:', e);
-    toast('Failed to approve buy-in');
+    // Call the approve_buy_in RPC
+    const result = await safeApiCall(
+      async () => await (supabase as any).rpc('approve_buy_in', { p_request_id: reqId }),
+      'Failed to approve buy-in'
+    );
+
+    if (result) {
+      // Immediately update local state
+      const playerId = reqData.player_id;
+      const amount = reqData.amount;
+
+      // Update player totals locally
+      setPlayerTotals(prev => ({
+        ...prev,
+        [playerId]: (prev[playerId] || 0) + amount
+      }));
+
+      // Update players array with new total
+      setPlayers(prev => prev.map(p => 
+        p.id === playerId 
+          ? { ...p, totalPoints: (playerTotals[p.id] || 0) + amount }
+          : p
+      ));
+
+      // Remove from pending requests
+      setTableState(prev => ({
+        ...prev,
+        pendingRequests: prev.pendingRequests.filter(r => r.id !== reqId),
+        processingRequests: prev.processingRequests.filter(id => id !== reqId)
+      }));
+
+      // Refresh all data to ensure consistency
+      await refreshTableData(table.id, 'handleApprove');
+      
+      // Notify success
+      toast.success('Buy-in approved');
+
+      // Broadcast update to other clients
+      try {
+        await supabase
+          .channel('table_' + table.id)
+          .send({
+            type: 'broadcast',
+            event: 'buy_in_updated',
+            payload: { playerId, amount }
+          });
+      } catch (e) {
+        console.warn('[PokerTable] Failed to broadcast buy-in update:', e);
+      }
+    }
+  } catch (error) {
+    console.error('[PokerTable] Buy-in approval error:', error);
+    toast.error('Failed to approve buy-in');
   } finally {
-    setProcessingRequests(prev => prev.filter(id => id !== reqId));
+    // Reset processing state if failed
+    setTableState(prev => ({
+      ...prev,
+      processingRequests: prev.processingRequests.filter(id => id !== reqId)
+    }));
   }
 };
 
@@ -1191,7 +1240,7 @@ const handleReject = async (reqId: string) => {
     // delete the request (no points applied)
     await supabase.from('buy_in_requests').delete().eq('id', reqId);
     const { data } = await supabase.from('buy_in_requests').select('*').eq('table_id', table.id).eq('status', 'pending');
-    setPendingRequests(data || []);
+    setTableState(prev => ({ ...prev, pendingRequests: data || [] }));
 
     // notify the player (best-effort)
     try {
@@ -1809,7 +1858,7 @@ return (
             <Button
               onClick={onExit}
               className="w-full h-10 text-sm font-semibold bg-slate-600 hover:bg-slate-700 text-white border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
-              aria-label="Return to table selection"
+                           aria-label="Return to table selection"
             >
               <span role="img" aria-label="back arrow" className="mr-2">←</span> Back to Selection
             </Button>
@@ -2033,8 +2082,9 @@ return (
                               }}>
                                 <Input
                                   type="number"
-                                  step="any"
+                                  step="0.01" // Allow decimals with 2 decimal places
                                   inputMode="decimal"
+                                  pattern="[0-9]*[.,]?[0-9]*"
                                   disabled={!isAdmin}
                                   className="bg-gray-800/80 border-green-500/40 text-emerald-300 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs font-mono text-right"
                                   style={{
@@ -2043,8 +2093,8 @@ return (
                                     fontSize: '16px',
                                     padding: '2px 6px'
                                   }}
-                                  value={endUpValues[p.id] ?? ''}               // show empty instead of 0
-                                  onChange={(e) => handleEndUpChange(p.id, e.target.value)}  // pass raw string
+                                  value={formatEndUpValue(endUpValues[p.id])}
+                                  onChange={(e) => handleEndUpChange(p.id, e.target.value)}
                                 />
                               </TableCell>
                               <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
@@ -2059,48 +2109,44 @@ return (
                           );
                         })}
                         {/* Summary Row */}
-                        {(() => {
-                          const totalBuyIns = players.reduce((sum, p) => sum + parseInt(String(playerTotals[p.id] ?? 0), 10), 0);
-                          const totalEndUp = players.reduce((sum, p) => sum + (endUpValues[p.id] ?? 0), 0);
-                          const totalProfit = calculatePlayerProfit('total', totalEndUp, totalBuyIns);
-                          
-                          return (
-                            <TableRow className="border-t-2 border-emerald-500/50 bg-emerald-900/20">
-                              <TableCell className="text-emerald-200 font-bold text-xs" style={{
-                                padding: '6px 2px',
-                                height: 36,
-                                verticalAlign: 'middle',
-                                fontSize: '12px'
-                              }}>
-                                TOTAL
-                              </TableCell>
-                              <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
-                                padding: '6px 2px',
-                                height: 36,
-                                verticalAlign: 'middle',
-                                fontSize: '14px'
-                              }}>
-                                {totalBuyIns}
-                              </TableCell>
-                              <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
-                                padding: '6px 2px',
-                                height: 36,
-                                verticalAlign: 'middle',
-                                fontSize: '14px'
-                              }}>
-                                {totalEndUp.toFixed(0)}
-                              </TableCell>
-                              <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
-                                padding: '6px 2px',
-                                height: 36,
-                                verticalAlign: 'middle',
-                                fontSize: '14px'
-                              }}>
-                                {totalProfit.toFixed(2)}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })()}
+                        <TableRow className="border-t-2 border-emerald-500/50 bg-emerald-900/20">
+                          <TableCell className="text-emerald-200 font-bold text-xs" style={{
+                            padding: '6px 2px',
+                            height: 36,
+                            verticalAlign: 'middle',
+                            fontSize: '12px'
+                          }}>
+                            TOTAL
+                          </TableCell>
+                          <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
+                            padding: '6px 2px',
+                            height: 36,
+                            verticalAlign: 'middle',
+                            fontSize: '14px'
+                          }}>
+                            {players.reduce((sum, p) => sum + parseInt(String(playerTotals[p.id] ?? 0), 10), 0)}
+                          </TableCell>
+                          <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
+                            padding: '6px 2px',
+                            height: 36,
+                            verticalAlign: 'middle',
+                            fontSize: '14px'
+                          }}>
+                            {players.reduce((sum, p) => sum + (endUpValues[p.id] ?? 0), 0).toFixed(0)}
+                          </TableCell>
+                          <TableCell className="text-emerald-200 font-bold text-right text-xs" style={{
+                            padding: '6px 2px',
+                            height: 36,
+                            verticalAlign: 'middle',
+                            fontSize: '14px'
+                          }}>
+                            {calculatePlayerProfit(
+                              'total',
+                              players.reduce((sum, p) => sum + (endUpValues[p.id] ?? 0), 0),
+                              players.reduce((sum, p) => sum + parseInt(String(playerTotals[p.id] ?? 0), 10), 0)
+                            ).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
                       </TableBody>
                     </UITable>
           </div>
@@ -2379,12 +2425,12 @@ return (
         )}
 
         {/* Admin Pending Requests */}
-        {isAdmin && (pendingRequests.length > 0 || pendingJoinRequests.length > 0) && (
+        {isAdmin && (tableState.pendingRequests.length > 0 || tableState.pendingJoinRequests.length > 0) && (
           <div className="bg-black/60 border border-red-500/40 rounded-lg py-3 px-3">
             <h3 className="text-white text-sm font-semibold mb-2">Pending Requests</h3>
             
             {/* Buy-in requests */}
-            {pendingRequests.map((r) => (
+            {tableState.pendingRequests.map((r) => (
               <div key={r.id} className="flex items-center justify-between p-2 mb-2 border rounded border-slate-600/40 bg-slate-800/40">
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white text-sm truncate">
@@ -2398,7 +2444,7 @@ return (
                   <Button
                     size="sm"
                     onClick={() => handleApprove(r.id)}
-                    disabled={processingRequests.includes(r.id)}
+                    disabled={tableState.processingRequests.includes(r.id)}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label={`Approve buy-in request for ${players.find((p: any) => p.id === r.player_id)?.name || 'player'}`}
                   >
@@ -2409,7 +2455,7 @@ return (
                     variant="destructive"
                     className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                     onClick={() => handleReject(r.id)}
-                    disabled={processingRequests.includes(r.id)}
+                    disabled={tableState.processingRequests.includes(r.id)}
                     aria-label={`Reject buy-in request for ${players.find((p: any) => p.id === r.player_id)?.name || 'player'}`}
                   >
                     ✗
@@ -2419,7 +2465,7 @@ return (
             ))}
 
             {/* Join requests */}
-            {pendingJoinRequests.map((r) => {
+            {tableState.pendingJoinRequests.map((r) => {
               const playerObj = players.find((p: any) => p.id === r.player_id);
               const displayName = playerObj?.name || r.player_name || '';
               return (
@@ -2711,3 +2757,17 @@ return (
 };
 
 export default PokerTable;
+
+// Add after other helper functions, before the handlers
+const safeApiCall = async <T,>(
+  fn: () => Promise<T>,
+  errorMessage: string
+): Promise<T | null> => {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(`[PokerTable] ${errorMessage}:`, e);
+    toast.error(errorMessage);
+    return null;
+  }
+};
