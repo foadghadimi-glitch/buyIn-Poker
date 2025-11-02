@@ -2004,6 +2004,77 @@ const getFilteredPlayers = (playersList: any[]) => {
   );
 };
 
+const renderSummaryDialog = (triggerClassName: string) => (
+  <Dialog open={openSummary} onOpenChange={setOpenSummary}>
+    <DialogTrigger asChild>
+      <button
+        onClick={() => fetchSummaryData(table?.id || '')}
+        className={triggerClassName}
+        aria-label="View game summary and profits"
+      >
+        <BarChart3 className="w-5 h-5" aria-hidden="true" />
+        Summary
+      </button>
+    </DialogTrigger>
+    <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md" style={{ width: '400px', maxWidth: '90vw' }}>
+      <DialogHeader>
+        <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
+      </DialogHeader>
+      <div style={{ fontSize: '14px', overflowX: 'auto', overflowY: 'auto', maxHeight: '60vh' }}>
+        <UITable>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 100, padding: '8px' }}>Player</TableHead>
+              <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 80, padding: '8px' }}>
+                Total
+              </TableHead>
+              {summaryData.length > 0 && summaryData[0].gameResults.map((_, idx) => (
+                <TableHead key={idx} className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 50, padding: '8px' }}>
+                  Game {idx + 1}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {summaryData.map(player => (
+              <TableRow key={player.playerName} className="border-b border-gray-700/40">
+                <TableCell className="text-white font-medium text-sm truncate" style={{ minWidth: 100, maxWidth: 120, padding: '8px' }}>
+                  {player.playerName}
+                </TableCell>
+                <TableCell className="text-white font-mono text-right font-semibold" style={{ minWidth: 80, padding: '8px', fontSize: '16px' }}>
+                  {player.totalProfit >= 0 ? player.totalProfit.toFixed(2) : `-${Math.abs(player.totalProfit).toFixed(2)}`}
+                </TableCell>
+                {player.gameResults.map((result, idx) => (
+                  <TableCell
+                    key={idx}
+                    className="text-slate-300 font-mono text-right"
+                    style={{ minWidth: 50, padding: '8px', fontSize: '12px' }}
+                  >
+                    {result !== null
+                      ? result >= 0
+                        ? result.toFixed(2)
+                        : `-${Math.abs(result).toFixed(2)}`
+                      : '-'}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </UITable>
+      </div>
+      <DialogFooter className="mt-4">
+        <Button
+          onClick={() => setOpenSummary(false)}
+          className="bg-gray-700 hover:bg-gray-600 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500/60"
+          aria-label="Close summary dialog"
+        >
+          Close
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+);
+
 return (
   <div 
     className="min-h-[100dvh] h-[100dvh] flex flex-col bg-[#0b0f10] text-slate-100 relative"
@@ -2288,7 +2359,7 @@ return (
             </Dialog>
 
             {/* Row 3: History, End Up (admin-only), & Summary */}
-            <div className={`grid gap-2 ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            <div className={`grid gap-2 ${isAdmin ? 'grid-cols-2' : 'grid-cols-2'}`}>
               {/* History button */}
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
@@ -2352,8 +2423,8 @@ return (
                 </HistoryDialogContent>
               </HistoryDialog>
 
-              {/* End Up button - Admin only */}
-              {isAdmin && (
+              {/* End Up button - Admin only OR Summary for non-admin */}
+              {isAdmin ? (
                 <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                   <DialogTrigger asChild>
                     <button 
@@ -2453,86 +2524,61 @@ return (
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+              ) : (
+                renderSummaryDialog("h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60")
               )}
-
-              {/* Summary button - Available for all players */}
-              <Dialog open={openSummary} onOpenChange={setOpenSummary}>
-                <DialogTrigger asChild>
-                  <button
-                    onClick={() => fetchSummaryData(table?.id || '')}
-                    className="h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-                    aria-label="View game summary and profits"
-                  >
-                    <BarChart3 className="w-5 h-5" aria-hidden="true" />
-                    Summary
-                  </button>
-                </DialogTrigger>
-                <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md" style={{ width: '400px', maxWidth: '90vw' }}>
-                  <DialogHeader>
-                    <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
-                  </DialogHeader>
-                  <div style={{
-                    fontSize: '14px',
-                    overflowX: 'auto',
-                    overflowY: 'auto',
-                    maxHeight: '60vh'
-                  }}>
-                    <UITable>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 100, padding: '8px' }}>Player</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 80, padding: '8px' }}>
-                            Total
-                          </TableHead>
-                          {summaryData.length > 0 && summaryData[0].gameResults.map((_, idx) => (
-                            <TableHead key={idx} className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 50, padding: '8px' }}>
-                              Game {idx + 1}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {summaryData.map(player => (
-                          <TableRow key={player.playerName} className="border-b border-gray-700/40">
-                            <TableCell className="text-white font-medium text-sm truncate" style={{ minWidth: 100, maxWidth: 120, padding: '8px' }}>
-                              {player.playerName}
-                            </TableCell>
-                            <TableCell className="text-white font-mono text-right font-semibold" style={{ minWidth: 80, padding: '8px', fontSize: '16px' }}>
-                              {player.totalProfit >= 0 ? player.totalProfit.toFixed(2) : `-${Math.abs(player.totalProfit).toFixed(2)}`}
-                            </TableCell>
-                            {player.gameResults.map((result, idx) => (
-                              <TableCell 
-                                key={idx} 
-                                className="text-slate-300 font-mono text-right"
-                                style={{ minWidth: 50, padding: '8px', fontSize: '12px' }}
-                              >
-                                {result !== null 
-                                  ? result >= 0 
-                                    ? result.toFixed(2) 
-                                    : `-${Math.abs(result).toFixed(2)}`
-                                  : '-'
-                                }
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </UITable>
-                  </div>
-                  <DialogFooter className="mt-4">
-                    <Button
-                      onClick={() => setOpenSummary(false)}
-                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500/60"
-                      aria-label="Close summary dialog"
-                    >
-                      Close
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
             </div>
 
-            {/* Row 4: Edit and Exit - smaller buttons */}
+            {isAdmin && (
+              <div className="grid grid-cols-2 gap-2">
+                {renderSummaryDialog("h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60")}
+                <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
+                  <DialogTrigger asChild>
+                    <button
+                      className="h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-purple-600 hover:bg-purple-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60"
+                      aria-label="Start a new game"
+                    >
+                      <Play className="w-5 h-5" aria-hidden="true" />
+                      New Game
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-black/90 backdrop-blur-md border-purple-500/40 text-white max-w-sm w-80">
+                    <DialogHeader>
+                      <DialogTitle className="text-lg font-bold text-white">Start New Game</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 text-sm">
+                      <p className="text-gray-300 leading-relaxed">
+                        This will complete the current game and start a new one.
+                      </p>
+                      <p className="text-gray-300 text-sm leading-relaxed">
+                        All buy-ins and end-up values will be reset. Game profits have been saved.
+                      </p>
+                      <p className="text-yellow-300 text-sm font-semibold leading-relaxed">
+                        Make sure you've saved the end-up values before starting a new game!
+                      </p>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setOpenStartNewGame(false)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleStartNewGame}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+                        aria-label="Confirm start new game"
+                      >
+                        Start New Game
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
+            {/* Row 5: Edit and Exit - smaller buttons */}
             <div className="grid grid-cols-2 gap-2">
               {/* Edit Profile button */}
               <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
@@ -2871,97 +2917,6 @@ return (
       </div>
     </div>
   )}
-  
-  {/* History Dialog */}
-  <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
-    <HistoryDialogContent
-      className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
-      style={{ width: '400px', maxWidth: '90vw' }}
-    >
-      <HistoryDialogHeader>
-        <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
-      </HistoryDialogHeader>
-      <div style={{
-        fontSize: '14px',
-        overflowX: 'auto',
-        overflowY: 'auto',
-        maxHeight: '60vh'
-      }}>
-        <UITable>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 80, padding: '8px' }}>Player</TableHead>
-              {(() => {
-                const playerBuyIns = players.map((p: any) =>
-                  historyData.filter((row: any) => row.player_id === p.id)
-                );
-                const maxBuyIns = playerBuyIns.length ? Math.max(...playerBuyIns.map(arr => arr.length)) : 0;
-                return Array.from({ length: maxBuyIns }).map((_, idx) => (
-                  <TableHead key={idx} className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 50, padding: '8px' }}>
-                    {idx + 1}
-                  </TableHead>
-                ));
-              })()}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {players.map((p: any) => {
-              const buyIns = historyData
-                .filter((row: any) => row.player_id === p.id)
-                .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-              return (
-                <TableRow key={p.id} className="border-b border-gray-700/40">
-                  <TableCell className="text-white font-medium text-sm truncate" style={{ minWidth: 80, maxWidth: 120, padding: '8px' }}>{p.name}</TableCell>
-                  {buyIns.map((row: any, idx: number) => (
-                    <TableCell key={idx} className="text-emerald-300 font-mono text-right text-sm" style={{ minWidth: 50, padding: '8px' }}>
-                      {parseInt(row.amount, 10)}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </UITable>
-      </div>
-      <HistoryDialogFooter>
-        <Button variant="secondary" onClick={() => setOpenHistory(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-semibold">Close</Button>
-      </HistoryDialogFooter>
-    </HistoryDialogContent>
-  </HistoryDialog>
-  
-  <Dialog open={openExit} onOpenChange={setOpenExit}>
-    <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
-      <DialogHeader>
-        <DialogTitle className="text-lg font-bold text-white">Exit Game</DialogTitle>
-      </DialogHeader>
-      <div className="space-y-3 text-sm">
-        <p className="text-gray-300 leading-relaxed">You will be moved to the table selection page.</p>
-        <p className="text-gray-300 text-sm leading-relaxed">Click Yes to continue.</p>
-      </div>
-      <DialogFooter>
-        <Button
-          variant="secondary"
-          onClick={() => setOpenExit(false)}
-          disabled={processingExit}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={async () => {
-            setOpenExit(false);
-            await handleExitGame();
-          }}
-          disabled={processingExit}
-          className="bg-red-600 hover:bg-red-700 text-white font-semibold"
-          aria-label="Confirm exit from poker table"
-        >
-          Yes, Exit Table
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
 </div>
 );
 };
