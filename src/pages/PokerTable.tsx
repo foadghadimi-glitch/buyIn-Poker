@@ -13,7 +13,7 @@ import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogH
 import { toast } from 'sonner';
 import { Player, PokerTable as PokerTableType, Game, GameProfit } from '@/integrations/supabase/types';
 import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
-import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3 } from 'lucide-react';
+import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3, Coffee } from 'lucide-react';
 
 type PokerTableRow = {
   admin_player_id?: string; // changed from admin_user_id
@@ -52,6 +52,37 @@ type JoinRequest = {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 };
+
+// Add after other type definitions
+type DrinkOrder = {
+  id: string;
+  table_id: string;
+  player_id: string;
+  drink_name: string;
+  price: number;
+  created_at: string;
+};
+
+type PlayerDrinkSummary = {
+  playerId: string;
+  playerName: string;
+  orders: {
+    drinkName: string;
+    count: number;
+    totalPrice: number;
+  }[];
+  totalAmount: number;
+};
+
+const DEFAULT_DRINKS = [
+  { name: 'Coffee', price: 3 },
+  { name: 'Tea', price: 3 },
+  { name: 'Iced Coffee', price: 4.5 },
+  { name: 'Coca cola', price: 3 },
+  { name: 'Hoegaarden', price: 3.5 },
+  { name: 'Spa', price: 2.5 },
+  { name: 'Duvel', price: 4.5 }
+];
 
 const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true }: PokerTableProps) => {
   // NORMALIZE admin id & join code (covers snake_case / camelCase)
@@ -124,7 +155,12 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
   const [openExit, setOpenExit] = useState(false);
   const [openSummary, setOpenSummary] = useState(false); // Add state for summary dialog
   const [openStartNewGame, setOpenStartNewGame] = useState(false); // Add state for start new game dialog
+  const [openDrinks, setOpenDrinks] = useState(false);
   const [amount, setAmount] = useState('');
+  const [drinkOrders, setDrinkOrders] = useState<DrinkOrder[]>([]);
+  const [drinkSummaries, setDrinkSummaries] = useState<PlayerDrinkSummary[]>([]);
+  const [customDrink, setCustomDrink] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
   const [tableState, setTableState] = useState<{
     pendingRequests: BuyInRequest[];
     pendingJoinRequests: JoinRequest[];
@@ -139,17 +175,15 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     processingJoinRequests: []
   });
   const [playerTotals, setPlayerTotals] = useState<Record<string, number>>({});
-  // DIAG: keep previous totals snapshot for diff logging
   const prevTotalsRef = useRef<Record<string, number>>({});
   const [pendingJoinRequests, setPendingJoinRequests] = useState<any[]>([]);
-  const [historyData, setHistoryData] = useState<any[]>([]); // Store buy-in history
-  const [endUpValues, setEndUpValues] = useState<Record<string, number>>({}); // Store end up values per player
-  const [processingRequests, setProcessingRequests] = useState<string[]>([]);
-  const [processingJoinRequests, setProcessingJoinRequests] = useState<string[]>([]);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [endUpValues, setEndUpValues] = useState<Record<string, number>>({});
   const [processingExit, setProcessingExit] = useState(false);
   // prevent double-submit from UI for buy-in and join actions
   const [processingBuyIn, setProcessingBuyIn] = useState(false);
   const [processingJoinRequestLocal, setProcessingJoinRequestLocal] = useState(false);
+  const [processingDrinkOrder, setProcessingDrinkOrder] = useState(false);
   // synchronous refs to prevent double-submit race before state updates
   const processingBuyInRef = useRef(false);
   const processingJoinRef = useRef(false);
@@ -168,6 +202,126 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     navigator.clipboard.writeText(normalizedJoinCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  // Add fetchDrinkOrders after fetchCurrentGame
+  const fetchDrinkOrders = async (tableId: string) => {
+    if (!tableId) return;
+    
+    try {
+      const { data: orders, error: ordersError } = await supabase
+        .from('drink_orders')
+        .select('id, player_id, drink_name, price, created_at')
+        .eq('table_id', tableId)
+        .order('created_at', { ascending: false });
+  
+      if (ordersError) {
+        console.error('[PokerTable][fetchDrinkOrders] error:', ordersError);
+        return;
+      }
+  
+      const playerIds = Array.from(new Set((orders || []).map(o => o.player_id)));
+  
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('id, name')
+        .in('id', playerIds);
+  
+      if (playersError) {
+        console.warn('[PokerTable][fetchDrinkOrders] players fetch failed:', playersError);
+        return;
+      }
+  
+      const playerNames = new Map(
+        (playersData || []).map(p => [p.id, p.name])
+      );
+  
+      const summariesByPlayer = new Map<string, PlayerDrinkSummary>();
+      
+      (orders || []).forEach(order => {
+        const playerId = order.player_id;
+        const playerName = playerNames.get(playerId) || 'Unknown';
+        
+        let summary = summariesByPlayer.get(playerId);
+        if (!summary) {
+          summary = {
+            playerId,
+            playerName,
+            orders: [],
+            totalAmount: 0
+          };
+          summariesByPlayer.set(playerId, summary);
+        }
+  
+        let drinkEntry = summary.orders.find(o => o.drinkName === order.drink_name);
+        if (!drinkEntry) {
+          drinkEntry = {
+            drinkName: order.drink_name,
+            count: 0,
+            totalPrice: 0
+          };
+          summary.orders.push(drinkEntry);
+        }
+  
+        drinkEntry.count++;
+        drinkEntry.totalPrice += Number(order.price || 0);
+        summary.totalAmount += Number(order.price || 0);
+      });
+  
+      const summaries = Array.from(summariesByPlayer.values());
+      setDrinkOrders(orders || []);
+      setDrinkSummaries(summaries);
+  
+      console.log('[PokerTable][fetchDrinkOrders] loaded', {
+        orders: orders?.length,
+        summaries: summaries.length
+      });
+  
+    } catch (error) {
+      console.error('[PokerTable][fetchDrinkOrders] error:', error);
+    }
+  };
+
+  // Add handleDrinkOrder - KEEP ONLY ONE INSTANCE
+  const handleDrinkOrder = async (drinkName: string, price: number) => {
+    if (!profile?.id || processingDrinkOrder) return;
+    setProcessingDrinkOrder(true);
+  
+    try {
+      const { error } = await supabase.from('drink_orders').insert({
+        id: uuidv4(),
+        table_id: table.id,
+        player_id: profile.id,
+        drink_name: drinkName,
+        price: price,
+        created_at: new Date().toISOString()
+      });
+  
+      if (error) throw error;
+      
+      setCustomDrink('');
+      setCustomPrice('');
+      toast.success('Drink order placed');
+      await fetchDrinkOrders(table.id);
+      
+      // Broadcast to other players
+      try {
+        await supabase
+          .channel('table_' + table.id)
+          .send({
+            type: 'broadcast',
+            event: 'drink_order_added',
+            payload: { playerId: profile.id, drinkName, price }
+          });
+      } catch (e) {
+        console.warn('[PokerTable] Failed to broadcast drink order:', e);
+      }
+    } catch (error) {
+      console.error('[PokerTable][handleDrinkOrder] failed:', error);
+      toast.error('Failed to place drink order');
+    } finally {
+      setProcessingDrinkOrder(false);
+    }
   };
 
   // First modify the handleEndUpChange function to better handle decimals:
@@ -257,6 +411,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     await fetchEndUpValues(tableId);
     // NEW: fetch current game
     await fetchCurrentGame(tableId);
+    await fetchDrinkOrders(tableId);
     console.log('[PokerTable][refresh] done', { tableId, source });
   };
 
@@ -800,7 +955,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     return () => { supabase.removeChannel(ch); };
   }, [table?.id, players]); // include players so missing players detection stays current
 
-  // NEW / EXTENDED: explicit broadcast channel so participants refresh (already existed for buy_in_updated)
+  // NEW / EXTENDED: explicit broadcast channel - ADD drink_order_added listener
   useEffect(() => {
     if (!table?.id) return;
     const bc = supabase
@@ -817,7 +972,6 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
         console.log('[PokerTable][broadcast][join_refresh] received', payload);
         try {
           await refreshTableData(table.id, 'broadcast:join_refresh');
-          // If the updated player is the admin, fetch and update admin name
           if (payload?.updatedPlayer === normalizedAdminId) {
             await fetchAdminName(table.id);
           }
@@ -832,6 +986,14 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
           toast.info(`New game ${payload?.payload?.gameNumber || ''} started!`);
         } catch (e) {
           console.warn('[PokerTable] broadcast new_game_started refresh failed', e);
+        }
+      })
+      .on('broadcast', { event: 'drink_order_added' }, async (payload) => {
+        console.log('[PokerTable][broadcast][drink_order_added] received', payload);
+        try {
+          await fetchDrinkOrders(table.id);
+        } catch (e) {
+          console.warn('[PokerTable] broadcast drink_order_added refresh failed', e);
         }
       })
       .subscribe();
@@ -1150,6 +1312,20 @@ const loadPlayersFromJoinTable = async (tableId: string, totals: Record<string, 
   }
 };
 
+// Add after other helper functions, before the handlers
+const safeApiCall = async <T,>(
+  fn: () => Promise<T>,
+  errorMessage: string
+): Promise<T | null> => {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(`[PokerTable] ${errorMessage}:`, e);
+    toast.error(errorMessage);
+    return null;
+  }
+};
+
 // Admin handlers for buy-in requests
 const handleApprove = async (reqId: string) => {
   if (!reqId || tableState.processingRequests.includes(reqId) || !table) return;
@@ -1208,7 +1384,7 @@ const handleApprove = async (reqId: string) => {
       // Notify success
       toast.success('Buy-in approved');
 
-      // Broadcast update to other clients
+      // Broadcast to other clients
       try {
         await supabase
           .channel('table_' + table.id)
@@ -1234,33 +1410,36 @@ const handleApprove = async (reqId: string) => {
 };
 
 const handleReject = async (reqId: string) => {
-  if (!reqId || processingRequests.includes(reqId) || !table) return;
-  setProcessingRequests(prev => [...prev, reqId]);
+  if (!reqId || tableState.processingRequests.includes(reqId) || !table) return;
+  setTableState(prev => ({
+    ...prev,
+    processingRequests: [...prev.processingRequests, reqId]
+  }));
   try {
     // delete the request (no points applied)
     await supabase.from('buy_in_requests').delete().eq('id', reqId);
     const { data } = await supabase.from('buy_in_requests').select('*').eq('table_id', table.id).eq('status', 'pending');
-    setTableState(prev => ({ ...prev, pendingRequests: data || [] }));
-
-    // notify the player (best-effort)
-    try {
-      // we can try to look up the player id from the removed row via rpc or prior state;
-      // skip detailed notify to avoid additional queries here (admin UI shows rejection).
-    } catch (e) { /* ignore */ }
+    setTableState(prev => ({ ...prev, pendingRequests: data || [], processingRequests: prev.processingRequests.filter(id => id !== reqId) }));
 
     toast('Buy-in rejected');
   } catch (e) {
     console.error('[PokerTable] handleReject error:', e);
     toast('Failed to reject buy-in');
   } finally {
-    setProcessingRequests(prev => prev.filter(id => id !== reqId));
+    setTableState(prev => ({
+      ...prev,
+      processingRequests: prev.processingRequests.filter(id => id !== reqId)
+    }));
   }
 };
 
 // --- New: Admin handlers for join requests (approve/reject) ---
 const handleApproveJoin = async (reqId: string) => {
-  if (!reqId || processingJoinRequests.includes(reqId) || !table) return;
-  setProcessingJoinRequests(prev => [...prev, reqId]);
+  if (!reqId || tableState.processingJoinRequests.includes(reqId) || !table) return;
+  setTableState(prev => ({
+    ...prev,
+    processingJoinRequests: [...prev.processingJoinRequests, reqId]
+  }));
   try {
     const { data: reqRow, error } = await supabase
       .from('join_requests')
@@ -1323,13 +1502,19 @@ const handleApproveJoin = async (reqId: string) => {
     console.error('[PokerTable] handleApproveJoin error:', e);
     toast('Failed to approve join request');
   } finally {
-    setProcessingJoinRequests(prev => prev.filter(id => id !== reqId));
+    setTableState(prev => ({
+      ...prev,
+      processingJoinRequests: prev.processingJoinRequests.filter(id => id !== reqId)
+    }));
   }
 };
 
 const handleRejectJoin = async (reqId: string) => {
-  if (!reqId || processingJoinRequests.includes(reqId) || !table) return;
-  setProcessingJoinRequests(prev => [...prev, reqId]);
+  if (!reqId || tableState.processingJoinRequests.includes(reqId) || !table) return;
+  setTableState(prev => ({
+    ...prev,
+    processingJoinRequests: [...prev.processingJoinRequests, reqId]
+  }));
   try {
     // fetch the join_request so we can notify the player
     const { data: reqRow, error } = await supabase
@@ -1380,7 +1565,10 @@ const handleRejectJoin = async (reqId: string) => {
     console.error('[PokerTable] handleRejectJoin error:', e);
     toast('Failed to reject join request');
   } finally {
-    setProcessingJoinRequests(prev => prev.filter(id => id !== reqId));
+    setTableState(prev => ({
+      ...prev,
+      processingJoinRequests: prev.processingJoinRequests.filter(id => id !== reqId)
+    }));
   }
 };
 
@@ -1552,7 +1740,7 @@ const handleSaveEndUp = async () => {
       const profitRow = {
         table_id: table.id,
         game_id: currentGame.id,
-        game_number: currentGame.game_number, // Add game_number from currentGame
+        game_number: currentGame.game_number,
         player_id: playerId,
         profit: profit
       };
@@ -1739,7 +1927,6 @@ const fetchSummaryData = async (tableId: string) => {
       .sort((a, b) => b.totalProfit - a.totalProfit)
       .map(player => ({
         ...player,
-        // Ensure all game numbers have a value (0 or null for games not played)
         gameResults: gameNumbers.map(gameNum => 
           player.gameResults[gameNum] !== undefined ? player.gameResults[gameNum] : null
         )
@@ -1816,29 +2003,29 @@ return (
     
     <div className="relative h-full flex flex-col pt-safe pb-safe px-3" style={{ zIndex: 10 }}>
       {/* Header Section */}
-      <div className="flex-shrink-0 space-y-3">
-        <div className="rounded-2xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-4">
-          <div className="flex flex-col gap-3">
-            <h1 className="text-xl font-bold tracking-tight text-white truncate text-center">
+      <div className="flex-shrink-0 space-y-2">
+        <div className="rounded-xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-3">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-lg font-bold tracking-tight text-white truncate text-center">
               {table.name || normalizedJoinCode}
             </h1>
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="relative">
                 <button
                   onClick={handleCopyJoinCode}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition"
                   title="Copy join code"
                 >
                   <span>{normalizedJoinCode}</span>
-                  <Copy className="w-3.5 h-3.5" />
+                  <Copy className="w-3 h-3" />
                 </button>
                 {copied && (
-                  <div className="absolute -bottom-9 left-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md">
+                  <div className="absolute -bottom-8 left-0 bg-slate-800 text-white text-xs px-2 py-1 rounded-md">
                     Copied!
                   </div>
                 )}
               </div>
-              <div className="text-xs text-slate-300 text-right">
+              <div className="text-[11px] text-slate-300 text-right leading-tight">
                 <div>Admin: <span className="font-semibold text-white">{adminName}</span></div>
                 {currentGame && (
                   <div className="text-emerald-300 font-semibold">
@@ -1867,23 +2054,23 @@ return (
 
         {/* Player Actions */}
         {isPlayerOnTable && (
-          <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-4">
-            <h3 className="text-sm font-medium text-slate-200 mb-3">Actions</h3>
+          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-3">
+            <h3 className="text-xs font-medium text-slate-200 mb-2">Actions</h3>
             
             {/* Primary Buy-in Button */}
             <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
               <DialogTrigger asChild>
                 <button 
-                  className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  className="w-full h-12 rounded-xl text-base font-bold flex items-center justify-center gap-2.5 bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                   aria-label="Request buy-in from table admin"
                 >
-                  <Banknote className="w-5 h-5" aria-hidden="true" />
+                  <Banknote className="w-4 h-4" aria-hidden="true" />
                   Buy-in
                 </button>
               </DialogTrigger>
               <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
                 <DialogHeader>
-                  <DialogTitle className="text-lg fontbold text-white">Request Buy-in</DialogTitle>
+                  <DialogTitle className="text-lg font-bold text-white">Request Buy-in</DialogTitle>
                 </DialogHeader>
                 <form
                   onSubmit={e => {
@@ -1919,16 +2106,141 @@ return (
               </DialogContent>
             </Dialog>
 
+            {/* Drinks button */}
+            <Dialog open={openDrinks} onOpenChange={setOpenDrinks}>
+              <DialogTrigger asChild>
+                <button
+                  className="w-full h-12 rounded-xl text-base font-bold flex items-center justify-center gap-2.5 bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 mt-2"
+                  aria-label="Order drinks"
+                >
+                  <Coffee className="w-4 h-4" aria-hidden="true" />
+                  Drinks
+                </button>
+              </DialogTrigger>
+              <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-lg font-bold text-white">Order Drinks</DialogTitle>
+                </DialogHeader>
+                
+                {/* Default drinks grid */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-300 mb-3">Quick Order</h3>
+                    <div className="grid grid-cols-4 gap-2">
+                      {DEFAULT_DRINKS.map(drink => (
+                        <Button
+                          key={drink.name}
+                          onClick={() => handleDrinkOrder(drink.name, drink.price)}
+                          disabled={processingDrinkOrder}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 text-xs font-semibold flex-col"
+                        >
+                          <span>{drink.name}</span>
+                          <span className="text-emerald-200">€{drink.price}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom drink section */}
+                  <div className="border-t border-gray-700 pt-4">
+                    <h3 className="text-sm font-semibold text-gray-300 mb-3">Custom Drink</h3>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        value={customDrink}
+                        onChange={e => setCustomDrink(e.target.value)}
+                        placeholder="Drink name"
+                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 flex-grow"
+                      />
+                      <div className="relative flex-shrink-0 w-24">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">€</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={customPrice}
+                          onChange={e => setCustomPrice(e.target.value)}
+                          placeholder="Price"
+                          className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 pl-6"
+                        />
+                      </div>
+                      <Button
+                        onClick={() => handleDrinkOrder(customDrink, Number(customPrice))}
+                        disabled={!customDrink || !customPrice || processingDrinkOrder}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-4 flex-shrink-0"
+                      >
+                        {processingDrinkOrder ? '...' : 'Add'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Drinks summary table - Only this table, Player Drinks removed */}
+                  {drinkSummaries.length > 0 && (
+                    <div className="border-t border-gray-700 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-300 mb-3">Drink Summary</h3>
+                      <div className="max-h-64 overflow-y-auto">
+                        <UITable>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-slate-200 text-xs">Player</TableHead>
+                              <TableHead className="text-slate-200 text-xs text-right">Total</TableHead>
+                              <TableHead className="text-slate-200 text-xs">Details</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {drinkSummaries.map(summary => (
+                              <TableRow key={summary.playerId} className="border-b border-gray-700/40">
+                                <TableCell className="text-white text-xs font-medium py-2">
+                                  {summary.playerName}
+                                </TableCell>
+                                <TableCell className="text-emerald-300 text-xs font-mono text-right font-semibold py-2">
+                                  €{summary.totalAmount.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-slate-300 text-[10px] py-2 leading-tight">
+                                  {summary.orders.map((order, idx) => `${order.count}x ${order.drinkName}`).join(', ')}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {/* Grand Total Row */}
+                            <TableRow className="border-t-2 border-emerald-500/50 bg-emerald-900/20">
+                              <TableCell className="text-emerald-200 font-bold text-xs py-2">
+                                TOTAL
+                              </TableCell>
+                              <TableCell className="text-emerald-200 font-bold text-xs font-mono text-right py-2">
+                                €{drinkSummaries.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-slate-400 text-[10px] py-2 italic leading-tight">
+                                All drinks for this table
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </UITable>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setOpenDrinks(false)}
+                    className="bg-gray-700 hover:bg-gray-600 text-white"
+                  >
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             {/* Secondary Actions Grid */}
-            <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="grid grid-cols-3 gap-2 mt-2">
               {/* History button */}
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
                   <button 
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label="View buy-in history"
                   >
-                    <ScrollText className="w-4 h-4" aria-hidden="true" />
+                    <ScrollText className="w-3.5 h-3.5" aria-hidden="true" />
                     History
                   </button>
                 </HistoryDialogTrigger>
@@ -1937,7 +2249,7 @@ return (
                   style={{ width: '400px', maxWidth: '90vw' }}
                 >
                   <HistoryDialogHeader>
-                    <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
+                    <HistoryDialogTitle className="text-lg fontbold text-white">Buy-in History</HistoryDialogTitle>
                   </HistoryDialogHeader>
                   <div style={{
                     fontSize: '14px',
@@ -1991,98 +2303,45 @@ return (
               <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                 <DialogTrigger asChild>
                   <button 
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label="View end game calculations"
                   >
-                    <Flag className="w-4 h-4" aria-hidden="true" />
+                    <Flag className="w-3.5 h-3.5" aria-hidden="true" />
                     End Up
                   </button>
                 </DialogTrigger>
                 <DialogContent
                   className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
-                  style={{
-                    width: '400px',
-                    maxWidth: '90vw',
-                    padding: '16px',
-                    height: '82vh',
-                    maxHeight: '82vh',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}
+                  style={{ width: '400px', maxWidth: '90vw', padding: '16px', height: '82vh', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
                 >
                   <DialogHeader className="flex-shrink-0 pb-3">
                     <DialogTitle className="text-lg font-bold text-white">End Up Game</DialogTitle>
                   </DialogHeader>
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      flex: 1,
-                      overflowX: 'auto',
-                      overflowY: 'auto',
-                      padding: '0',
-                      minHeight: 0
-                    }}
-                  >
+                  <div style={{ fontSize: '12px', flex: 1, overflowX: 'auto', overflowY: 'auto', padding: '0', minHeight: 0 }}>
                     <UITable>
                       <TableHeader>
                         <TableRow className="border-b border-gray-600/40">
-                          <TableHead className="text-slate-200 font-semibold text-xs text-left" style={{
-                            padding: '4px 2px',
-                            whiteSpace: 'nowrap',
-                            fontSize: '11px'
-                          }}>Player</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{
-                            padding: '4px 2px',
-                            whiteSpace: 'nowrap',
-                            fontSize: '11px'
-                          }}>Buy-ins</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{
-                            padding: '4px 2px',
-                            fontSize: '11px'
-                          }}>End Up</TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{
-                            padding: '4px 2px',
-                            fontSize: '11px'
-                          }}>Profit/7</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-xs text-left" style={{ padding: '4px 2px', whiteSpace: 'nowrap', fontSize: '11px' }}>Player</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ padding: '4px 2px', whiteSpace: 'nowrap', fontSize: '11px' }}>Buy-ins</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ padding: '4px 2px', fontSize: '11px' }}>End Up</TableHead>
+                          <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ padding: '4px 2px', fontSize: '11px' }}>Profit/7</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {Array.isArray(players) && players.map((p: any) => {
+                        {players.map((p: any) => {
                           const totalBuyIns = parseInt(String(playerTotals[p.id] ?? 0), 10);
                           const endUp = endUpValues[p.id] ?? 0;
                           const profitDiv7 = calculatePlayerProfit(p.id, endUp, totalBuyIns).toFixed(2);
                           return (
-                            <TableRow
-                              key={p.id}
-                              className="border-b border-gray-700/40"
-                              style={{ minHeight: 32 }}
-                            >
-                              <TableCell className="text-white font-medium text-xs truncate" style={{
-                                padding: '4px 2px',
-                                height: 32,
-                                verticalAlign: 'middle',
-                                maxWidth: '80px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                fontSize: '12px'
-                              }}>{p.name}</TableCell>
-                              <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{
-                                padding: '4px 2px',
-                                height: 32,
-                                verticalAlign: 'middle',
-                                fontSize: '14px'
-                              }}>
+                            <TableRow key={p.id} className="border-b border-gray-700/40" style={{ minHeight: 32 }}>
+                              <TableCell className="text-white font-medium text-xs truncate" style={{ padding: '4px 2px', height: 32, verticalAlign: 'middle', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '12px' }}>{p.name}</TableCell>
+                              <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{ padding: '4px 2px', height: 32, verticalAlign: 'middle', fontSize: '14px' }}>
                                 {totalBuyIns}
                               </TableCell>
-                              <TableCell style={{
-                                padding: '4px 2px',
-                                textAlign: 'right',
-                                height: 32,
-                                verticalAlign: 'middle',
-                              }}>
+                              <TableCell style={{ padding: '4px 2px', textAlign: 'right', height: 32, verticalAlign: 'middle' }}>
                                 <Input
                                   type="number"
-                                  step="0.01" // Allow decimals with 2 decimal places
+                                  step="0.01"
                                   inputMode="decimal"
                                   pattern="[0-9]*[.,]?[0-9]*"
                                   disabled={!isAdmin}
@@ -2149,119 +2408,125 @@ return (
                         </TableRow>
                       </TableBody>
                     </UITable>
-          </div>
-          <DialogFooter className="flex-shrink-0 mt-3">
-            {isAdmin ? (
-              <div className="flex gap-2 w-full">
-                <Button 
-                  variant="secondary" 
-                  onClick={() => setOpenEndUp(false)} 
-                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-                >
-                  Close
-                </Button>
-                <Button 
-                  onClick={handleSaveEndUp} 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
-                >
-                  Save End Up
-                </Button>
-              </div>
-            ) : (
-              <Button 
-                variant="secondary" 
-                onClick={() => setOpenEndUp(false)} 
-                className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
-              >
-                Close
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                  </div>
+                  <DialogFooter className="flex-shrink-0 mt-3">
+                    {isAdmin ? (
+                      <div className="flex gap-2 w-full">
+                        <Button 
+                          variant="secondary" 
+                          onClick={() => setOpenEndUp(false)} 
+                          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                        >
+                          Close
+                        </Button>
+                        <Button 
+                          onClick={handleSaveEndUp} 
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
+                        >
+                          Save End Up
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => setOpenEndUp(false)} 
+                        className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      >
+                        Close
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
               {/* Summary button - Available for all players */}
               <Dialog open={openSummary} onOpenChange={setOpenSummary}>
                 <DialogTrigger asChild>
                   <button
                     onClick={() => fetchSummaryData(table?.id || '')}
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label="View game summary and profits"
                   >
-                    <BarChart3 className="w-4 h-4" aria-hidden="true" />
+                    <BarChart3 className="w-3.5 h-3.5" aria-hidden="true" />
                     Summary
                   </button>
                 </DialogTrigger>
                 <DialogContent
-                  className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-2xl"
-                  style={{ width: '600px', maxWidth: '90vw' }}
+                  className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-4xl"
+                  style={{ width: '90vw', maxWidth: '900px' }}
                 >
                   <DialogHeader>
                     <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
                   </DialogHeader>
                   <div
+                    className="summary-scroll-container"
                     style={{
                       fontSize: '14px',
-                      overflowX: 'auto',
+                      overflowX: 'scroll',
                       overflowY: 'auto',
-                      maxHeight: '60vh'
+                      maxHeight: '65vh',
+                      width: '100%',
+                      WebkitOverflowScrolling: 'touch',
+                      position: 'relative'
                     }}
                   >
-                    <UITable>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 120, padding: '8px' }}>
-                            Player
-                          </TableHead>
-                          <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 100, padding: '8px' }}>
-                            Total
-                          </TableHead>
-                          {summaryData[0]?.gameNumbers.map((gameNum) => (
-                            <TableHead 
-                              key={gameNum} 
-                              className="text-slate-200 font-semibold text-xs text-right" 
-                              style={{ 
-                                minWidth: 70, 
-                                padding: '4px',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              G{gameNum}
+                    <div style={{ minWidth: 'max-content', width: 'fit-content', display: 'inline-block' }}>
+                      <UITable>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-slate-200 font-semibold text-sm sticky left-0 bg-black/95 z-20 border-r border-slate-600" style={{ minWidth: 120, padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
+                              Player
                             </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {summaryData.map((player, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="text-white font-medium text-sm" style={{ padding: '8px' }}>
-                              {player.playerName}
-                            </TableCell>
-                            <TableCell 
-                              className={`font-mono text-sm font-bold text-right ${
-                                player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
-                              }`}
-                              style={{ padding: '8px' }}
-                            >
-                              {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(2)}
-                            </TableCell>
-                            {player.gameResults.map((profit, gameIdx) => (
-                              <TableCell 
-                                key={gameIdx} 
-                                className={`font-mono text-xs text-right ${
-                                  profit === null ? 'text-gray-500' : 
-                                  profit >= 0 ? 'text-emerald-300' : 'text-red-300'
-                                }`}
-                                style={{ padding: '4px' }}
+                            <TableHead className="text-slate-200 font-semibold text-sm sticky bg-black/95 z-20 text-right border-r-2 border-emerald-500/30" style={{ left: '120px', minWidth: 100, padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
+                              Total
+                            </TableHead>
+                            {summaryData[0]?.gameNumbers.map((gameNum) => (
+                              <TableHead 
+                                key={gameNum} 
+                                className="text-slate-200 font-semibold text-xs text-right" 
+                                style={{ 
+                                  minWidth: 70, 
+                                  padding: '4px',
+                                  whiteSpace: 'nowrap'
+                                }}
                               >
-                                {profit === null ? '-' : 
-                                 (profit >= 0 ? '+' : '') + profit.toFixed(1)}
-                              </TableCell>
+                                G{gameNum}
+                              </TableHead>
                             ))}
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </UITable>
+                        </TableHeader>
+                        <TableBody>
+                          {summaryData.map((player, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="text-white font-medium text-sm sticky left-0 bg-black/90 z-10 border-r border-slate-700" style={{ padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)' }}>
+                                {player.playerName}
+                              </TableCell>
+                              <TableCell 
+                                className={`font-mono text-sm font-bold text-right sticky bg-black/90 z-10 border-r-2 border-emerald-500/30 ${
+                                  player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
+                                }`}
+                                style={{ left: '120px', padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)' }}
+                              >
+                                {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(2)}
+                              </TableCell>
+                              {player.gameResults.map((profit, gameIdx) => (
+                                <TableCell 
+                                  key={gameIdx} 
+                                  className={`font-mono text-xs text-right ${
+                                    profit === null ? 'text-gray-500' : 
+                                    profit >= 0 ? 'text-emerald-300' : 'text-red-300'
+                                  }`}
+                                  style={{ padding: '4px' }}
+                                >
+                                  {profit === null ? '-' : 
+                                   (profit >= 0 ? '+' : '') + profit.toFixed(1)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </UITable>
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button
@@ -2279,7 +2544,7 @@ return (
               <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                 <DialogTrigger asChild>
                   <button
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     onClick={() => {
                       setEditName(profile?.name || '');
                       setEditError('');
@@ -2287,8 +2552,8 @@ return (
                     }}
                     aria-label="Edit your profile name"
                   >
-                    <Pencil className="w-4 h-4" aria-hidden="true" />
-                    Edit Profile
+                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                    Edit
                   </button>
                 </DialogTrigger>
                 <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
@@ -2332,14 +2597,14 @@ return (
                 <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60"
+                      className="h-10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-orange-600 hover:bg-orange-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
                       aria-label="Start a new game"
                     >
-                      <Play className="w-4 h-4" aria-hidden="true" />
-                      Start New Game
+                      <Play className="w-3.5 h-3.5" aria-hidden="true" />
+                      New Game
                     </button>
                   </DialogTrigger>
-                  <DialogContent className="bg-black/90 backdrop-blur-md border-emerald-500/40 text-white max-w-sm w-80">
+                  <DialogContent className="bg-black/90 backdrop-blur-md border-orange-500/40 text-white max-w-sm w-80">
                     <DialogHeader>
                       <DialogTitle className="text-lg font-bold text-white">Start New Game</DialogTitle>
                     </DialogHeader>
@@ -2350,8 +2615,8 @@ return (
                       <p className="text-gray-300 text-sm leading-relaxed">
                         All buy-ins and end-up values will be reset for the new game.
                       </p>
-                      <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
-                        <p className="text-emerald-200 font-semibold">
+                      <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-3">
+                        <p className="text-orange-200 font-semibold">
                           Current Game: {currentGame?.game_number || 'None'}
                         </p>
                       </div>
@@ -2366,7 +2631,7 @@ return (
                       </Button>
                       <Button
                         onClick={handleStartNewGame}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                        className="bg-orange-600 hover:bg-orange-700 text-white font-semibold"
                         aria-label="Confirm start new game"
                       >
                         Start New Game
@@ -2380,12 +2645,12 @@ return (
               <Dialog open={openExit} onOpenChange={setOpenExit}>
                 <DialogTrigger asChild>
                   <button
-                    className="h-12 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="h-10 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white transition shadow-sm active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     disabled={processingExit}
                     aria-label="Exit poker table"
                   >
-                    <LogOut className="w-4 h-4" aria-hidden="true" />
-                    Exit Table
+                    <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+                    Exit
                   </button>
                 </DialogTrigger>
                 <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
@@ -2478,7 +2743,7 @@ return (
                     <Button 
                       size="sm" 
                       onClick={() => handleApproveJoin(r.id)}
-                      disabled={processingJoinRequests.includes(r.id)}
+                      disabled={tableState.processingJoinRequests.includes(r.id)}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                       aria-label={`Approve join request for ${displayName}`}
                     >
@@ -2489,7 +2754,7 @@ return (
                       variant="destructive" 
                       className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs h-8 px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                       onClick={() => handleRejectJoin(r.id)}
-                      disabled={processingJoinRequests.includes(r.id)}
+                      disabled={tableState.processingJoinRequests.includes(r.id)}
                       aria-label={`Reject join request for ${displayName}`}
                     >
                       ✗
@@ -2502,21 +2767,21 @@ return (
         )}
       </div>
 
-      {/* Zone 2: Summary Row (auto height, compact) */}
+      {/* Zone 2: Summary Row (compact) */}
       {isPlayerOnTable && (
-        <div className="flex-shrink-0 my-3">
-          <div className="rounded-2xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-4 flex items-center justify-between">
+        <div className="flex-shrink-0 my-2">
+          <div className="rounded-xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-3 flex items-center justify-between">
             <div className="flex-1 min-w-0">
-              <div className="text-sm text-slate-300">Your Buy-ins</div>
-              <div className="text-4xl md:text-5xl font-extrabold text-emerald-300 font-mono tabular-nums">
+              <div className="text-xs text-slate-300">Your Buy-ins</div>
+              <div className="text-3xl md:text-4xl font-extrabold text-emerald-300 font-mono tabular-nums">
                 {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
               </div>
             </div>
             <div className="text-right flex-shrink-0">
-              <div className="text-sm text-slate-300">
+              <div className="text-xs text-slate-300">
                 Total Pot ({players.length} player{players.length !== 1 ? 's' : ''})
               </div>
-              <div className="text-lg md:text-xl font-semibold text-emerald-300 font-mono tabular-nums">
+              <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
                 {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
               </div>
             </div>
@@ -2524,12 +2789,12 @@ return (
         </div>
       )}
 
-      {/* Zone 3: Players Section (collapsed preview) */}
+      {/* Zone 3: Players Section (more space) */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="rounded-2xl border border-emerald-700/30 bg-black/40 overflow-hidden flex flex-col">
+        <div className="rounded-xl border border-emerald-700/30 bg-black/40 overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between py-3 px-3 flex-shrink-0">
-            <h3 className="text-base font-semibold text-white">All Players</h3>
+          <div className="flex items-center justify-between py-2 px-3 flex-shrink-0">
+            <h3 className="text-sm font-semibold text-white">All Players</h3>
             <button
               onClick={() => setOpenPlayerModal(true)}
               className="text-sm text-emerald-300 hover:text-emerald-200 font-medium flex-shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 px-1"
@@ -2667,7 +2932,7 @@ return (
           style={{ width: '400px', maxWidth: '90vw' }}
         >
           <HistoryDialogHeader>
-            <HistoryDialogTitle className="text-lg font-bold text-white">Buy-in History</HistoryDialogTitle>
+            <HistoryDialogTitle className="text-lg fontbold text-white">Buy-in History</HistoryDialogTitle>
           </HistoryDialogHeader>
           <div style={{
             fontSize: '14px',
@@ -2716,8 +2981,7 @@ return (
           </HistoryDialogFooter>
         </HistoryDialogContent>
       </HistoryDialog>
-
-      {/* Exit Dialog */}
+      
       <Dialog open={openExit} onOpenChange={setOpenExit}>
         <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
           <DialogHeader>
@@ -2757,17 +3021,3 @@ return (
 };
 
 export default PokerTable;
-
-// Add after other helper functions, before the handlers
-const safeApiCall = async <T,>(
-  fn: () => Promise<T>,
-  errorMessage: string
-): Promise<T | null> => {
-  try {
-    return await fn();
-  } catch (e) {
-    console.error(`[PokerTable] ${errorMessage}:`, e);
-    toast.error(errorMessage);
-    return null;
-  }
-};
