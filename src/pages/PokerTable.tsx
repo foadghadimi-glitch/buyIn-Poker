@@ -2157,10 +2157,10 @@ return (
                           key={drink.name}
                           onClick={() => handleDrinkOrder(drink.name, drink.price)}
                           disabled={processingDrinkOrder}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-[10px] font-semibold flex-col py-1 px-1"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-14 text-xs font-bold flex-col py-1.5 px-1.5 leading-tight"
                         >
-                          <span className="leading-tight">{drink.name}</span>
-                          <span className="text-emerald-200 text-[9px]">€{drink.price}</span>
+                          <span className="text-center mb-0.5">{drink.name}</span>
+                          <span className="text-emerald-200 text-[11px] font-semibold">€{drink.price}</span>
                         </Button>
                       ))}
                     </div>
@@ -2209,28 +2209,28 @@ return (
                     <div className="border-t border-gray-700 pt-3">
                       <h3 className="text-xs font-semibold text-gray-300 mb-2">Drink Summary</h3>
                       <div className="flex flex-col">
-                        {/* Scrollable player rows - increased height */}
+                        {/* Scrollable player rows */}
                         <div className="overflow-y-auto flex-1 max-h-72">
                           <UITable>
                             <TableHeader className="sticky top-0 bg-black z-10">
                               <TableRow>
-                                <TableHead className="text-slate-200 text-[10px] bg-black py-1.5">Player</TableHead>
-                                <TableHead className="text-slate-200 text-[10px] text-right bg-black py-1.5">Total</TableHead>
-                                <TableHead className="text-slate-200 text-[10px] bg-black py-1.5">Details</TableHead>
+                                <TableHead className="text-slate-200 text-xs bg-black py-2 font-semibold">Player</TableHead>
+                                <TableHead className="text-slate-200 text-xs text-right bg-black py-2 font-semibold">Total</TableHead>
+                                <TableHead className="text-slate-200 text-xs bg-black py-2 font-semibold">Details</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {drinkSummaries.map(summary => (
                                 <TableRow key={summary.playerId} className="border-b border-gray-700/40">
-                                  <TableCell className="text-white text-[10px] font-medium py-1.5">
+                                  <TableCell className="text-white text-xs font-medium py-2">
                                     {summary.playerName}
                                   </TableCell>
-                                  <TableCell className={`text-[10px] font-mono text-right font-semibold py-1.5 ${
+                                  <TableCell className={`text-xs font-mono text-right font-semibold py-2 ${
                                     summary.totalAmount >= 0 ? 'text-emerald-300' : 'text-red-400'
                                   }`}>
                                     €{summary.totalAmount.toFixed(2)}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-[9px] py-1.5 leading-tight">
+                                  <TableCell className="text-slate-300 text-[11px] py-2 leading-relaxed">
                                     {summary.orders.map((order, idx) => (
                                       <span key={idx}>
                                         {idx > 0 && ', '}
@@ -2251,18 +2251,18 @@ return (
                           </UITable>
                         </div>
                         
-                        {/* Fixed Grand Total Row - NOW WITH SOLID BACKGROUND */}
+                        {/* Fixed Grand Total Row */}
                         <div className="border-t-2 border-emerald-500/50 bg-black sticky bottom-0 mt-1">
                           <UITable>
                             <TableBody>
                               <TableRow className="bg-emerald-900/40">
-                                <TableCell className="text-emerald-200 font-bold text-[10px] py-2 w-[33%] bg-black">
+                                <TableCell className="text-emerald-200 font-bold text-xs py-2.5 w-[33%] bg-black">
                                   TOTAL
                                 </TableCell>
-                                <TableCell className="text-emerald-200 font-bold text-[10px] font-mono text-right py-2 w-[33%] bg-black">
+                                <TableCell className="text-emerald-200 font-bold text-xs font-mono text-right py-2.5 w-[33%] bg-black">
                                   €{drinkSummaries.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2)}
                                 </TableCell>
-                                <TableCell className="text-slate-400 text-[9px] py-2 italic leading-tight w-[34%] bg-black">
+                                <TableCell className="text-slate-400 text-[11px] py-2.5 italic leading-tight w-[34%] bg-black">
                                   All drinks
                                 </TableCell>
                               </TableRow>
@@ -2366,7 +2366,7 @@ return (
                   </button>
                 </DialogTrigger>
                 <DialogContent
-                  className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md"
+                  className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-md"
                   style={{ width: '400px', maxWidth: '90vw', padding: '16px', height: '82vh', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
                 >
                   <DialogHeader className="flex-shrink-0 pb-3">
@@ -2529,10 +2529,10 @@ return (
                       <UITable>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-slate-200 font-semibold text-xs sticky left-0 bg-black/95 z-20 border-r border-slate-600" style={{ minWidth: 90, padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
+                            <TableHead className="text-slate-200 font-semibold sticky left-0 bg-black/95 z-20 border-r border-slate-600" style={{ minWidth: 110, padding: '8px 10px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)', fontSize: '14px' }}>
                               Player
                             </TableHead>
-                            <TableHead className="text-slate-200 font-semibold text-xs sticky bg-black/95 z-20 text-right border-r-2 border-emerald-500/30" style={{ left: '90px', minWidth: 75, padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
+                            <TableHead className="text-slate-200 font-semibold sticky bg-black/95 z-20 text-right border-r-2 border-emerald-500/30" style={{ left: '110px', minWidth: 85, padding: '8px 10px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)', fontSize: '14px' }}>
                               Total
                             </TableHead>
                             {summaryData[0]?.gameNumbers.map((gameNum) => (
@@ -2553,14 +2553,14 @@ return (
                         <TableBody>
                           {summaryData.map((player, idx) => (
                             <TableRow key={idx}>
-                              <TableCell className="text-white font-medium text-xs sticky left-0 bg-black/90 z-10 border-r border-slate-700" style={{ padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <TableCell className="text-white font-medium sticky left-0 bg-black/90 z-10 border-r border-slate-700" style={{ padding: '8px 10px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px' }}>
                                 {player.playerName}
                               </TableCell>
                               <TableCell 
-                                className={`font-mono text-xs font-bold text-right sticky bg-black/90 z-10 border-r-2 border-emerald-500/30 ${
+                                className={`font-mono font-bold text-right sticky bg-black/90 z-10 border-r-2 border-emerald-500/30 ${
                                   player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
                                 }`}
-                                style={{ left: '90px', padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)' }}
+                                style={{ left: '110px', padding: '8px 10px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)', fontSize: '15px' }}
                               >
                                 {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(1)}
                               </TableCell>
