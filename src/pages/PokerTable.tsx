@@ -70,6 +70,7 @@ type PlayerDrinkSummary = {
     drinkName: string;
     count: number;
     totalPrice: number;
+    isCustom?: boolean;  // NEW: flag for custom drinks
   }[];
   totalAmount: number;
 };
@@ -204,6 +205,53 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // Add handleDrinkOrder - KEEP ONLY ONE INSTANCE
+  const handleDrinkOrder = async (drinkName: string, price: number) => {
+    if (!profile?.id || processingDrinkOrder) return;
+    setProcessingDrinkOrder(true);
+  
+    try {
+      // WORKAROUND: If negative price, store as positive with "REFUND: " prefix
+      const isRefund = price < 0;
+      const storedPrice = Math.abs(price);
+      const storedName = isRefund ? `REFUND: ${drinkName}` : drinkName;
+      
+      const { error } = await supabase.from('drink_orders').insert({
+        id: uuidv4(),
+        table_id: table.id,
+        player_id: profile.id,
+        drink_name: storedName,
+        price: storedPrice,
+        created_at: new Date().toISOString()
+      });
+  
+      if (error) throw error;
+      
+      setCustomDrink('');
+      setCustomPrice('');
+      toast.success(isRefund ? 'Refund recorded' : 'Drink order placed');
+      await fetchDrinkOrders(table.id);
+      
+      // Broadcast to other players
+      try {
+        await supabase
+          .channel('table_' + table.id)
+          .send({
+            type: 'broadcast',
+            event: 'drink_order_added',
+            payload: { playerId: profile.id, drinkName, price }
+          });
+      } catch (e) {
+        console.warn('[PokerTable] Failed to broadcast drink order:', e);
+      }
+    } catch (error) {
+      console.error('[PokerTable][handleDrinkOrder] failed:', error);
+      toast.error('Failed to place drink order');
+    } finally {
+      setProcessingDrinkOrder(false);
+    }
+  };
+
   // Add fetchDrinkOrders after fetchCurrentGame
   const fetchDrinkOrders = async (tableId: string) => {
     if (!tableId) return;
@@ -242,6 +290,11 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
         const playerId = order.player_id;
         const playerName = playerNames.get(playerId) || 'Unknown';
         
+        // WORKAROUND: Detect refunds by "REFUND: " prefix
+        const isRefund = order.drink_name.startsWith('REFUND: ');
+        const displayName = isRefund ? order.drink_name.substring(8) : order.drink_name;
+        const actualPrice = isRefund ? -Math.abs(order.price) : order.price;
+        
         let summary = summariesByPlayer.get(playerId);
         if (!summary) {
           summary = {
@@ -253,19 +306,25 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
           summariesByPlayer.set(playerId, summary);
         }
   
-        let drinkEntry = summary.orders.find(o => o.drinkName === order.drink_name);
+        // Check if this drink name matches any default drink (case-insensitive)
+        const isDefaultDrink = DEFAULT_DRINKS.some(
+          d => d.name.toLowerCase() === displayName.toLowerCase()
+        );
+        
+        let drinkEntry = summary.orders.find(o => o.drinkName === displayName);
         if (!drinkEntry) {
           drinkEntry = {
-            drinkName: order.drink_name,
+            drinkName: displayName,
             count: 0,
-            totalPrice: 0
+            totalPrice: 0,
+            isCustom: !isDefaultDrink  // NEW: flag to identify custom drinks
           };
           summary.orders.push(drinkEntry);
         }
   
         drinkEntry.count++;
-        drinkEntry.totalPrice += Number(order.price || 0);
-        summary.totalAmount += Number(order.price || 0);
+        drinkEntry.totalPrice += actualPrice;
+        summary.totalAmount += actualPrice;
       });
   
       const summaries = Array.from(summariesByPlayer.values());
@@ -282,77 +341,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     }
   };
 
-  // Add handleDrinkOrder - KEEP ONLY ONE INSTANCE
-  const handleDrinkOrder = async (drinkName: string, price: number) => {
-    if (!profile?.id || processingDrinkOrder) return;
-    setProcessingDrinkOrder(true);
-  
-    try {
-      const { error } = await supabase.from('drink_orders').insert({
-        id: uuidv4(),
-        table_id: table.id,
-        player_id: profile.id,
-        drink_name: drinkName,
-        price: price,
-        created_at: new Date().toISOString()
-      });
-  
-      if (error) throw error;
-      
-      setCustomDrink('');
-      setCustomPrice('');
-      toast.success('Drink order placed');
-      await fetchDrinkOrders(table.id);
-      
-      // Broadcast to other players
-      try {
-        await supabase
-          .channel('table_' + table.id)
-          .send({
-            type: 'broadcast',
-            event: 'drink_order_added',
-            payload: { playerId: profile.id, drinkName, price }
-          });
-      } catch (e) {
-        console.warn('[PokerTable] Failed to broadcast drink order:', e);
-      }
-    } catch (error) {
-      console.error('[PokerTable][handleDrinkOrder] failed:', error);
-      toast.error('Failed to place drink order');
-    } finally {
-      setProcessingDrinkOrder(false);
-    }
-  };
-
-  // First modify the handleEndUpChange function to better handle decimals:
-  const handleEndUpChange = (playerId: string, raw: string) => {
-    // Handle empty input
-    if (raw === '' || raw === null) {
-      setEndUpValues(prev => {
-        const next = { ...prev };
-        delete next[playerId];
-        return next;
-      });
-      return;
-    }
-
-    // Replace comma with dot for decimal
-    const normalized = raw.replace(',', '.');
-    // Convert to number but preserve decimals
-    const num = parseFloat(normalized);
-    setEndUpValues(prev => ({
-      ...prev,
-      [playerId]: isNaN(num) ? undefined : num
-    }));
-  };
-
-  // Update the input's value formatting to always show decimals properly
-  const formatEndUpValue = (value: number | undefined): string => {
-    if (value === undefined) return '';
-    return value.toString().replace(',', '.');
-  };
-
-  // NEW: fetch admin name (used by refreshTableData + fallback effect)
+  // Add fetchAdminName after other useEffects
   const fetchAdminName = async (tableId: string) => {
     try {
       const { data } = await supabase.from('poker_tables').select('admin_player_id').eq('id', tableId).maybeSingle();
@@ -365,7 +354,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     }
   };
 
-// ADD: fetchPendingJoinRequests (moved here so it's defined before first use anywhere)
+  // ADD: fetchPendingJoinRequests (moved here so it's defined before first use anywhere)
   const fetchPendingJoinRequests = async (tableId: string) => {
     if (!tableId) return;
     try {
@@ -397,7 +386,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     }
   };
 
-// MODIFIED: refresh includes admin name first
+  // MODIFIED: refresh includes admin name first
   const refreshTableData = async (tableId: string, source: string) => {
     console.log('[PokerTable][refresh] start', { tableId, source });
     if (!tableId) return;
@@ -415,7 +404,7 @@ const PokerTable = ({ table, profile, refreshKey, onExit, showBackground = true 
     console.log('[PokerTable][refresh] done', { tableId, source });
   };
 
-// REPLACED: adminName effect to rely on injected prop or fallback fetch (without duplicate logic)
+  // REPLACED: adminName effect to rely on injected prop or fallback fetch (without duplicate logic)
   useEffect(() => {
     if (!table?.id) {
       setAdminName('');
@@ -1680,6 +1669,34 @@ const calculatePlayerProfit = (playerId: string, endUpValue: number, totalBuyIns
   return (endUpValue - totalBuyIns) / 7;
 };
 
+// First modify the handleEndUpChange function to better handle decimals:
+const handleEndUpChange = (playerId: string, raw: string) => {
+  // Handle empty input
+  if (raw === '' || raw === null) {
+    setEndUpValues(prev => {
+      const next = { ...prev };
+      delete next[playerId];
+      return next;
+    });
+    return;
+  }
+
+  // Replace comma with dot for decimal
+  const normalized = raw.replace(',', '.');
+  // Convert to number but preserve decimals
+  const num = parseFloat(normalized);
+  setEndUpValues(prev => ({
+    ...prev,
+    [playerId]: isNaN(num) ? undefined : num
+  }));
+};
+
+// Update the input's value formatting to always show decimals properly
+const formatEndUpValue = (value: number | undefined): string => {
+  if (value === undefined) return '';
+  return value.toString().replace(',', '.');
+};
+
 // REPLACE: Admin action now persists to DB and broadcasts
 const handleSaveEndUp = async () => {
   if (!table?.id || !currentGame?.id) {
@@ -2085,10 +2102,18 @@ return (
                   <Label htmlFor="amount" className="text-sm font-semibold text-gray-300">Amount</Label>
                   <Input
                     id="amount"
-                    type="number"
-                    inputMode="decimal"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="-?[0-9]*\.?[0-9]*"
                     value={amount}
-                    onChange={e => setAmount(e.target.value)}
+                    onChange={e => {
+                      const value = e.target.value;
+                      // Strict validation: only allow negative sign at start, digits, and max one decimal point
+                      if (value === '' || value === '-' || /^-?\d*\.?\d*$/.test(value)) {
+                        setAmount(value);
+                      }
+                    }}
+                    placeholder="e.g. 50 or -20"
                     className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-base h-11"
                     autoFocus
                   />
@@ -2160,7 +2185,13 @@ return (
                           value={customPrice}
                           onChange={e => setCustomPrice(e.target.value)}
                           placeholder="Price"
-                          className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-9 pl-5"
+                          className={`bg-gray-800/80 border-green-500/40 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-9 pl-5 ${
+                            customPrice && Number(customPrice) !== 0
+                              ? Number(customPrice) > 0 
+                                ? 'text-yellow-400' 
+                                : 'text-red-400'
+                              : 'text-white'
+                          }`}
                         />
                       </div>
                       <Button
@@ -2194,11 +2225,25 @@ return (
                                   <TableCell className="text-white text-[10px] font-medium py-1.5">
                                     {summary.playerName}
                                   </TableCell>
-                                  <TableCell className="text-emerald-300 text-[10px] font-mono text-right font-semibold py-1.5">
+                                  <TableCell className={`text-[10px] font-mono text-right font-semibold py-1.5 ${
+                                    summary.totalAmount >= 0 ? 'text-emerald-300' : 'text-red-400'
+                                  }`}>
                                     €{summary.totalAmount.toFixed(2)}
                                   </TableCell>
                                   <TableCell className="text-slate-300 text-[9px] py-1.5 leading-tight">
-                                    {summary.orders.map((order, idx) => `${order.count}x ${order.drinkName}`).join(', ')}
+                                    {summary.orders.map((order, idx) => (
+                                      <span key={idx}>
+                                        {idx > 0 && ', '}
+                                        <span className={
+                                          order.isCustom
+                                            ? order.totalPrice >= 0 ? 'text-yellow-300' : 'text-red-400'
+                                            : 'text-slate-300'
+                                        }>
+                                          {order.count}x {order.drinkName}
+                                          {order.isCustom && ` (€${order.totalPrice.toFixed(2)})`}
+                                        </span>
+                                      </span>
+                                    ))}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -2206,18 +2251,18 @@ return (
                           </UITable>
                         </div>
                         
-                        {/* Fixed Grand Total Row */}
-                        <div className="border-t-2 border-emerald-500/50 bg-emerald-900/20 sticky bottom-0 mt-1">
+                        {/* Fixed Grand Total Row - NOW WITH SOLID BACKGROUND */}
+                        <div className="border-t-2 border-emerald-500/50 bg-black sticky bottom-0 mt-1">
                           <UITable>
                             <TableBody>
-                              <TableRow>
-                                <TableCell className="text-emerald-200 font-bold text-[10px] py-2 w-[33%]">
+                              <TableRow className="bg-emerald-900/40">
+                                <TableCell className="text-emerald-200 font-bold text-[10px] py-2 w-[33%] bg-black">
                                   TOTAL
                                 </TableCell>
-                                <TableCell className="text-emerald-200 font-bold text-[10px] font-mono text-right py-2 w-[33%]">
+                                <TableCell className="text-emerald-200 font-bold text-[10px] font-mono text-right py-2 w-[33%] bg-black">
                                   €{drinkSummaries.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2)}
                                 </TableCell>
-                                <TableCell className="text-slate-400 text-[9px] py-2 italic leading-tight w-[34%]">
+                                <TableCell className="text-slate-400 text-[9px] py-2 italic leading-tight w-[34%] bg-black">
                                   All drinks
                                 </TableCell>
                               </TableRow>
@@ -2344,7 +2389,7 @@ return (
                           const profitDiv7 = calculatePlayerProfit(p.id, endUp, totalBuyIns).toFixed(2);
                           return (
                             <TableRow key={p.id} className="border-b border-gray-700/40" style={{ minHeight: 32 }}>
-                              <TableCell className="text-white font-medium text-xs truncate" style={{ padding: '4px 2px', height: 32, verticalAlign: 'middle', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '12px' }}>{p.name}</TableCell>
+                              <TableCell className="text-white font-medium text-xs truncate" style={{ padding: '4px 2px', height: 32, verticalAlign: 'middle', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</TableCell>
                               <TableCell className="text-emerald-300 font-mono text-right text-xs" style={{ padding: '4px 2px', height: 32, verticalAlign: 'middle', fontSize: '14px' }}>
                                 {totalBuyIns}
                               </TableCell>
