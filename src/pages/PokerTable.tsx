@@ -2117,113 +2117,123 @@ return (
                   Drinks
                 </button>
               </DialogTrigger>
-              <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-lg font-bold text-white">Order Drinks</DialogTitle>
+              <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md max-h-[90vh] flex flex-col">
+                <DialogHeader className="flex-shrink-0">
+                  <DialogTitle className="text-base font-bold text-white">Order Drinks</DialogTitle>
                 </DialogHeader>
                 
-                {/* Default drinks grid */}
-                <div className="space-y-4">
+                {/* Scrollable content area */}
+                <div className="space-y-3 overflow-y-auto flex-1 min-h-0 pr-2">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-300 mb-3">Quick Order</h3>
-                    <div className="grid grid-cols-4 gap-2">
+                    <h3 className="text-xs font-semibold text-gray-300 mb-2">Quick Order</h3>
+                    <div className="grid grid-cols-4 gap-1.5">
                       {DEFAULT_DRINKS.map(drink => (
                         <Button
                           key={drink.name}
                           onClick={() => handleDrinkOrder(drink.name, drink.price)}
                           disabled={processingDrinkOrder}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-12 text-xs font-semibold flex-col"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-[10px] font-semibold flex-col py-1 px-1"
                         >
-                          <span>{drink.name}</span>
-                          <span className="text-emerald-200">€{drink.price}</span>
+                          <span className="leading-tight">{drink.name}</span>
+                          <span className="text-emerald-200 text-[9px]">€{drink.price}</span>
                         </Button>
                       ))}
                     </div>
                   </div>
 
                   {/* Custom drink section */}
-                  <div className="border-t border-gray-700 pt-4">
-                    <h3 className="text-sm font-semibold text-gray-300 mb-3">Custom Drink</h3>
-                    <div className="flex items-center gap-2">
+                  <div className="border-t border-gray-700 pt-3">
+                    <h3 className="text-xs font-semibold text-gray-300 mb-2">Custom Drink</h3>
+                    <div className="flex items-center gap-1.5">
                       <Input
                         type="text"
                         value={customDrink}
                         onChange={e => setCustomDrink(e.target.value)}
-                        placeholder="Drink name"
-                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 flex-grow"
+                        placeholder="Name"
+                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-9 flex-grow"
                       />
-                      <div className="relative flex-shrink-0 w-24">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">€</span>
+                      <div className="relative flex-shrink-0 w-20">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">€</span>
                         <Input
                           type="number"
                           step="0.01"
                           value={customPrice}
                           onChange={e => setCustomPrice(e.target.value)}
                           placeholder="Price"
-                          className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 pl-6"
+                          className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-9 pl-5"
                         />
                       </div>
                       <Button
                         onClick={() => handleDrinkOrder(customDrink, Number(customPrice))}
                         disabled={!customDrink || !customPrice || processingDrinkOrder}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-4 flex-shrink-0"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-3 flex-shrink-0 text-xs"
                       >
                         {processingDrinkOrder ? '...' : 'Add'}
                       </Button>
                     </div>
                   </div>
 
-                  {/* Drinks summary table - Only this table, Player Drinks removed */}
+                  {/* Drinks summary table */}
                   {drinkSummaries.length > 0 && (
-                    <div className="border-t border-gray-700 pt-4">
-                      <h3 className="text-sm font-semibold text-gray-300 mb-3">Drink Summary</h3>
-                      <div className="max-h-64 overflow-y-auto">
-                        <UITable>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-slate-200 text-xs">Player</TableHead>
-                              <TableHead className="text-slate-200 text-xs text-right">Total</TableHead>
-                              <TableHead className="text-slate-200 text-xs">Details</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {drinkSummaries.map(summary => (
-                              <TableRow key={summary.playerId} className="border-b border-gray-700/40">
-                                <TableCell className="text-white text-xs font-medium py-2">
-                                  {summary.playerName}
+                    <div className="border-t border-gray-700 pt-3">
+                      <h3 className="text-xs font-semibold text-gray-300 mb-2">Drink Summary</h3>
+                      <div className="flex flex-col">
+                        {/* Scrollable player rows - increased height */}
+                        <div className="overflow-y-auto flex-1 max-h-72">
+                          <UITable>
+                            <TableHeader className="sticky top-0 bg-black z-10">
+                              <TableRow>
+                                <TableHead className="text-slate-200 text-[10px] bg-black py-1.5">Player</TableHead>
+                                <TableHead className="text-slate-200 text-[10px] text-right bg-black py-1.5">Total</TableHead>
+                                <TableHead className="text-slate-200 text-[10px] bg-black py-1.5">Details</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {drinkSummaries.map(summary => (
+                                <TableRow key={summary.playerId} className="border-b border-gray-700/40">
+                                  <TableCell className="text-white text-[10px] font-medium py-1.5">
+                                    {summary.playerName}
+                                  </TableCell>
+                                  <TableCell className="text-emerald-300 text-[10px] font-mono text-right font-semibold py-1.5">
+                                    €{summary.totalAmount.toFixed(2)}
+                                  </TableCell>
+                                  <TableCell className="text-slate-300 text-[9px] py-1.5 leading-tight">
+                                    {summary.orders.map((order, idx) => `${order.count}x ${order.drinkName}`).join(', ')}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </UITable>
+                        </div>
+                        
+                        {/* Fixed Grand Total Row */}
+                        <div className="border-t-2 border-emerald-500/50 bg-emerald-900/20 sticky bottom-0 mt-1">
+                          <UITable>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="text-emerald-200 font-bold text-[10px] py-2 w-[33%]">
+                                  TOTAL
                                 </TableCell>
-                                <TableCell className="text-emerald-300 text-xs font-mono text-right font-semibold py-2">
-                                  €{summary.totalAmount.toFixed(2)}
+                                <TableCell className="text-emerald-200 font-bold text-[10px] font-mono text-right py-2 w-[33%]">
+                                  €{drinkSummaries.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2)}
                                 </TableCell>
-                                <TableCell className="text-slate-300 text-[10px] py-2 leading-tight">
-                                  {summary.orders.map((order, idx) => `${order.count}x ${order.drinkName}`).join(', ')}
+                                <TableCell className="text-slate-400 text-[9px] py-2 italic leading-tight w-[34%]">
+                                  All drinks
                                 </TableCell>
                               </TableRow>
-                            ))}
-                            {/* Grand Total Row */}
-                            <TableRow className="border-t-2 border-emerald-500/50 bg-emerald-900/20">
-                              <TableCell className="text-emerald-200 font-bold text-xs py-2">
-                                TOTAL
-                              </TableCell>
-                              <TableCell className="text-emerald-200 font-bold text-xs font-mono text-right py-2">
-                                €{drinkSummaries.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2)}
-                              </TableCell>
-                              <TableCell className="text-slate-400 text-[10px] py-2 italic leading-tight">
-                                All drinks for this table
-                              </TableCell>
-                            </TableRow>
-                          </TableBody>
-                        </UITable>
+                            </TableBody>
+                          </UITable>
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="flex-shrink-0 mt-2">
                   <Button
                     variant="secondary"
                     onClick={() => setOpenDrinks(false)}
-                    className="bg-gray-700 hover:bg-gray-600 text-white"
+                    className="bg-gray-700 hover:bg-gray-600 text-white text-sm"
                   >
                     Close
                   </Button>
@@ -2452,19 +2462,19 @@ return (
                   </button>
                 </DialogTrigger>
                 <DialogContent
-                  className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-4xl"
-                  style={{ width: '90vw', maxWidth: '900px' }}
+                  className="bg-black/90 backdrop-blur-md border-blue-500/40 text-white max-w-5xl"
+                  style={{ width: '95vw', maxWidth: '1000px' }}
                 >
-                  <DialogHeader>
-                    <DialogTitle className="text-lg font-bold text-white">Game Summary</DialogTitle>
+                  <DialogHeader className="pb-2">
+                    <DialogTitle className="text-base font-bold text-white">Game Summary</DialogTitle>
                   </DialogHeader>
                   <div
                     className="summary-scroll-container"
                     style={{
-                      fontSize: '14px',
+                      fontSize: '12px',
                       overflowX: 'scroll',
                       overflowY: 'auto',
-                      maxHeight: '65vh',
+                      maxHeight: '70vh',
                       width: '100%',
                       WebkitOverflowScrolling: 'touch',
                       position: 'relative'
@@ -2474,19 +2484,19 @@ return (
                       <UITable>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="text-slate-200 font-semibold text-sm sticky left-0 bg-black/95 z-20 border-r border-slate-600" style={{ minWidth: 120, padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
+                            <TableHead className="text-slate-200 font-semibold text-xs sticky left-0 bg-black/95 z-20 border-r border-slate-600" style={{ minWidth: 90, padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
                               Player
                             </TableHead>
-                            <TableHead className="text-slate-200 font-semibold text-sm sticky bg-black/95 z-20 text-right border-r-2 border-emerald-500/30" style={{ left: '120px', minWidth: 100, padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
+                            <TableHead className="text-slate-200 font-semibold text-xs sticky bg-black/95 z-20 text-right border-r-2 border-emerald-500/30" style={{ left: '90px', minWidth: 75, padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.3)' }}>
                               Total
                             </TableHead>
                             {summaryData[0]?.gameNumbers.map((gameNum) => (
                               <TableHead 
                                 key={gameNum} 
-                                className="text-slate-200 font-semibold text-xs text-right" 
+                                className="text-slate-200 font-semibold text-[10px] text-right" 
                                 style={{ 
-                                  minWidth: 70, 
-                                  padding: '4px',
+                                  minWidth: 55, 
+                                  padding: '6px 4px',
                                   whiteSpace: 'nowrap'
                                 }}
                               >
@@ -2498,25 +2508,25 @@ return (
                         <TableBody>
                           {summaryData.map((player, idx) => (
                             <TableRow key={idx}>
-                              <TableCell className="text-white font-medium text-sm sticky left-0 bg-black/90 z-10 border-r border-slate-700" style={{ padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)' }}>
+                              <TableCell className="text-white font-medium text-xs sticky left-0 bg-black/90 z-10 border-r border-slate-700" style={{ padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {player.playerName}
                               </TableCell>
                               <TableCell 
-                                className={`font-mono text-sm font-bold text-right sticky bg-black/90 z-10 border-r-2 border-emerald-500/30 ${
+                                className={`font-mono text-xs font-bold text-right sticky bg-black/90 z-10 border-r-2 border-emerald-500/30 ${
                                   player.totalProfit >= 0 ? 'text-emerald-300' : 'text-red-300'
                                 }`}
-                                style={{ left: '120px', padding: '8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)' }}
+                                style={{ left: '90px', padding: '6px 8px', boxShadow: '2px 0 4px rgba(0,0,0,0.2)' }}
                               >
-                                {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(2)}
+                                {(player.totalProfit >= 0 ? '+' : '') + player.totalProfit.toFixed(1)}
                               </TableCell>
                               {player.gameResults.map((profit, gameIdx) => (
                                 <TableCell 
                                   key={gameIdx} 
-                                  className={`font-mono text-xs text-right ${
+                                  className={`font-mono text-[10px] text-right ${
                                     profit === null ? 'text-gray-500' : 
                                     profit >= 0 ? 'text-emerald-300' : 'text-red-300'
                                   }`}
-                                  style={{ padding: '4px' }}
+                                  style={{ padding: '6px 4px' }}
                                 >
                                   {profit === null ? '-' : 
                                    (profit >= 0 ? '+' : '') + profit.toFixed(1)}
@@ -2528,11 +2538,11 @@ return (
                       </UITable>
                     </div>
                   </div>
-                  <DialogFooter>
+                  <DialogFooter className="pt-2">
                     <Button
                       variant="secondary"
                       onClick={() => setOpenSummary(false)}
-                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold"
+                      className="bg-gray-700 hover:bg-gray-600 text-white font-semibold text-sm"
                     >
                       Close
                     </Button>
