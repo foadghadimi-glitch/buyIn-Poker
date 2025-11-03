@@ -2791,58 +2791,6 @@ return (
           </div>
         </div>
       )}
-
-      {/* Zone 3: Players Section (more space) */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="rounded-xl border border-emerald-700/30 bg-black/40 overflow-hidden flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between py-2 px-3 flex-shrink-0">
-            <h3 className="text-sm font-semibold text-white">All Players</h3>
-            <button
-              onClick={() => setOpenPlayerModal(true)}
-              className="text-sm text-emerald-300 hover:text-emerald-200 font-medium flex-shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 px-1"
-              aria-label={`View all ${players.length} players`}
-            >
-              Show all ({players.length})
-            </button>
-          </div>
-          
-          {/* Preview list - top 5 players only */}
-          <div className="overflow-y-auto">
-            {getSortedPlayers().slice(0, 5).map((p: any, index: number) => {
-              const isPending = !!p.pending;
-              const isInactive = !p.pending && p.active === false;
-              const total = parseInt(String(playerTotals[p.id] ?? 0), 10);
-              
-              return (
-                <div 
-                  key={p.id} 
-                  className="flex items-center justify-between px-3 py-2 md:py-3 border-t border-emerald-800/10"
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="truncate max-w-[60%] text-sm font-medium text-white">{p.name}</span>
-                    {isPending && (
-                      <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/90 text-white font-semibold flex-shrink-0">
-                        Pending
-                      </span>
-                    )}
-                    {isInactive && (
-                      <span className="text-[10px] px-1 py-0.5 rounded bg-slate-600/80 text-white font-medium flex-shrink-0">
-                        Exited
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
-                      {total}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
     </div>
   </div>
   
