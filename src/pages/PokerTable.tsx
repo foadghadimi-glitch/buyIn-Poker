@@ -2537,7 +2537,7 @@ return (
                 <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-purple-600 hover:bg-purple-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60"
+                      className="h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                       aria-label="Start a new game"
                     >
                       <Play className="w-5 h-5" aria-hidden="true" />
