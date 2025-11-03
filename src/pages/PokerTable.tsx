@@ -13,7 +13,7 @@ import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogH
 import { toast } from 'sonner';
 import { Player, PokerTable as PokerTableType, Game, GameProfit } from '@/integrations/supabase/types';
 import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
-import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3, Coffee } from 'lucide-react';
+import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3, Coffee, Users } from 'lucide-react';
 
 type PokerTableRow = {
   admin_player_id?: string; // changed from admin_user_id
@@ -1682,14 +1682,14 @@ const handleEndUpChange = (playerId: string, raw: string) => {
     return;
   }
 
-  // Replace comma with dot for decimal
-  const normalized = raw.replace(',', '.');
-  // Convert to number but preserve decimals
-  const num = parseFloat(normalized);
-  setEndUpValues(prev => ({
-    ...prev,
-    [playerId]: isNaN(num) ? undefined : num
-  }));
+  // Convert to number
+  const num = parseFloat(raw);
+  if (!isNaN(num) && num >= 0) {
+    setEndUpValues(prev => ({
+      ...prev,
+      [playerId]: num
+    }));
+  }
 };
 
 // Update the input's value formatting to always show decimals properly
@@ -1914,6 +1914,7 @@ const fetchSummaryData = async (tableId: string) => {
 
     // 4. Build summary data with proper game number handling
     const summaryMap = new Map<string, {
+
       playerName: string;
       totalProfit: number;
       gameResults: { [gameNumber: number]: number };
@@ -2348,7 +2349,6 @@ return (
 
                 <DialogFooter className="flex-shrink-0 mt-2">
                   <Button
-                    variant="secondary"
                     onClick={() => setOpenDrinks(false)}
                     className="bg-gray-700 hover:bg-gray-600 text-white text-sm"
                   >
@@ -2482,8 +2482,10 @@ return (
                                   </TableCell>
                                   <TableCell className="text-slate-300 text-sm font-mono text-right py-2">
                                     <Input
-                                      type="text"
-                                      value={formatEndUpValue(endUpValue)}
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={endUpValues[p.id] ?? ''}
                                       onChange={e => handleEndUpChange(p.id, e.target.value)}
                                       placeholder="0.00"
                                       className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 w-full text-right"
@@ -2577,6 +2579,16 @@ return (
                 </Dialog>
               </div>
             )}
+
+            {/* Row 4: Players button - Full width, visible for all */}
+            <button
+              onClick={() => setOpenPlayerModal(true)}
+              className="h-14 rounded-2xl text-lg font-bold flex flex-col items-center justify-center gap-1 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+              aria-label={`View all ${players.length} players`}
+            >
+              <Users className="w-5 h-5" aria-hidden="true" />
+              Players ({players.length})
+            </button>
 
             {/* Row 5: Edit and Exit - smaller buttons */}
             <div className="grid grid-cols-2 gap-2">
