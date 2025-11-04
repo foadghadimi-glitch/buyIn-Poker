@@ -2116,7 +2116,7 @@ return (
         return null;
       })()}
       <div className="flex-shrink-0">
-        <div className="rounded-xl border border-emerald-700/25 bg-black/40 backdrop-blur-sm p-4">
+        <div className="rounded-2xl border border-emerald-500/25 bg-black/40 backdrop-blur-sm p-2">
           <div className="flex items-center justify-between gap-4">
             {/* Left: Table Name */}
             <div className="flex-1 min-w-0">
@@ -2129,12 +2129,12 @@ return (
             <div className="relative flex-shrink-0">
               <button
                 onClick={handleCopyJoinCode}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition text-sm"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition text-xs"
                 title="Copy join code"
                 style={{ minHeight: '32px', minWidth: '80px' }}
               >
-                <span className="text-base">{normalizedJoinCode}</span>
-                <Copy className="w-4 h-4" />
+                <span className="text-sm">{normalizedJoinCode}</span>
+                <Copy className="w-3 h-3" />
               </button>
               {copied && (
                 <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-0.5 rounded-md whitespace-nowrap">
@@ -2201,8 +2201,8 @@ return (
             console.log('[PokerTable] RENDER: Box 2 - Actions');
             return null;
           })()}
-          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-3">
-            <h3 className="text-sm font-bold text-white mb-3 uppercase tracking-wide">Actions</h3>
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
+            <h3 className="text-[10px] font-bold text-white mb-3 uppercase tracking-wide">Actions</h3>
             <div className="space-y-2">
               {/* Row 1: Buy-in Button */}
               <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
@@ -2420,7 +2420,7 @@ return (
                 <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-12 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="Edit your profile name"
                     >
                       <Pencil className="w-4 h-4" aria-hidden="true" />
@@ -2467,7 +2467,7 @@ return (
                 <Dialog open={openExit} onOpenChange={setOpenExit}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-12 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 bg-red-700/90 hover:bg-red-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      className="h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-red-700/90 hover:bg-red-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                       aria-label="Exit the table"
                     >
                       <LogOut className="w-4 h-4" aria-hidden="true" />
@@ -2509,14 +2509,14 @@ return (
             console.log('[PokerTable] RENDER: Box 3 - Overview');
             return null;
           })()}
-          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-3">
-            <h3 className="text-sm font-bold text-white mb-3 uppercase tracking-wide">Overview</h3>
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
+            <h3 className="text-[10px] font-bold text-white mb-3 uppercase tracking-wide">Overview</h3>
             <div className="grid grid-cols-2 gap-2">
               {/* History button */}
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
                   <button 
-                    className="h-16 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                    className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                     aria-label="View buy-in history"
                   >
                     <ScrollText className="w-5 h-5" aria-hidden="true" />
@@ -2576,7 +2576,7 @@ return (
               </HistoryDialog>
 
               {/* Summary button */}
-              {renderSummaryDialog("h-16 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
+              {renderSummaryDialog("h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
             </div>
           </div>
 
@@ -2586,18 +2586,18 @@ return (
             return null;
           })()}
           {isAdmin && (
-            <div className="rounded-xl border border-amber-500/30 bg-black/50 backdrop-blur-sm p-3">
+            <div className="rounded-2xl border border-amber-500/30 bg-black/50 backdrop-blur-sm p-2">
               {(() => {
                 console.log('[PokerTable] RENDER: Inside Box 4 - Admin section');
                 return null;
               })()}
-              <h3 className="text-sm font-bold text-amber-400 mb-3 uppercase tracking-wide">Admin</h3>
+              <h3 className="text-[10px] font-bold text-amber-400 mb-3 uppercase tracking-wide">Admin</h3>
               <div className="grid grid-cols-2 gap-2">
                 {/* End Up button */}
                 <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                   <DialogTrigger asChild>
                     <button 
-                      className="h-16 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="View end game calculations"
                     >
                       <Flag className="w-5 h-5" aria-hidden="true" />
@@ -2700,7 +2700,7 @@ return (
                 <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-16 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="Start a new game"
                     >
                       <Play className="w-5 h-5" aria-hidden="true" />
@@ -2736,36 +2736,7 @@ return (
             </div>
           )}
 
-          {/* Box 5: Player Summary (Your Total) */}
-          {(() => {
-            console.log('[PokerTable] RENDER: Box 5 - Player Summary');
-            return null;
-          })()}
-          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-slate-300 mb-1">Your Buy-ins</div>
-                <div className="text-4xl md:text-5xl font-extrabold text-emerald-300 font-mono tabular-nums">
-                  {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
-                </div>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <div className="text-sm text-slate-300 mb-1">
-                  Total Pot
-                </div>
-                <div className="text-xl md:text-2xl font-bold text-emerald-300 font-mono tabular-nums">
-                  {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  {players.length} player{players.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Admin Pending Requests */}
+      {/* Box 5: Admin Pending Requests */}
       {(() => {
         console.log('[PokerTable] RENDER: Checking pending requests', { 
           isAdmin,
@@ -2776,8 +2747,8 @@ return (
         return null;
       })()}
       {isAdmin && (tableState.pendingRequests.length > 0 || tableState.pendingJoinRequests.length > 0) && (
-        <div className="rounded-xl border border-red-500/40 bg-black/50 backdrop-blur-sm py-3 px-3">
-          <h3 className="text-base font-bold text-white mb-2 uppercase tracking-wide">Pending Requests</h3>
+        <div className="rounded-2xl border border-red-500/40 bg-black/50 backdrop-blur-sm py-3 px-3">
+          <h3 className="text-xs font-bold text-white mb-2 uppercase tracking-wide">Pending Requests</h3>
           
           {/* Buy-in requests */}
           {tableState.pendingRequests.map((r) => (
@@ -2849,6 +2820,35 @@ return (
             );
           })}
         </div>
+      )}
+
+          {/* Box 6: Player Summary (Your Total) */}
+          {(() => {
+            console.log('[PokerTable] RENDER: Box 5 - Player Summary');
+            return null;
+          })()}
+          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-slate-300 mb-1">Your Buy-ins</div>
+                <div className="text-2xl md:text-3xl font-extrabold text-emerald-300 font-mono tabular-nums">
+                  {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-xs text-slate-300 mb-1">
+                  Total Pot
+                </div>
+                <div className="text-l md:text-xl font-bold text-emerald-300 font-mono tabular-nums">
+                  {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  {players.length} player{players.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Debugging end of render */}
