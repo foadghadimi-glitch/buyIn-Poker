@@ -13,7 +13,7 @@ import { Dialog as HistoryDialog, DialogContent as HistoryDialogContent, DialogH
 import { toast } from 'sonner';
 import { Player, PokerTable as PokerTableType, Game, GameProfit } from '@/integrations/supabase/types';
 import { TablePlayerLocal, EnhancedPokerTable } from '@/types/table';
-import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3, Coffee, Users } from 'lucide-react';
+import { Banknote, ScrollText, Flag, Pencil, LogOut, Copy, Play, BarChart3, Coffee, Users, UserCircle2 } from 'lucide-react';
 
 type PokerTableRow = {
   admin_player_id?: string; // changed from admin_user_id
@@ -2599,6 +2599,94 @@ return (
           <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
             <h3 className="text-[10px] font-bold text-white mb-3 uppercase tracking-wide">Overview</h3>
             <div className="grid grid-cols-2 gap-2">
+
+              {/* Overview  add the "All Players" button */}
+              <button
+                type="button"
+                onClick={() => setOpenPlayerModal(true)}
+                className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                aria-label={`Open all players list (${players?.length ?? 0})`}
+              >
+                All Players
+                <span className="ml-1 rounded-md bg-emerald-800/60 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
+                  {players?.length ?? 0}
+                </span>
+              </button>
+
+              {/* Full-screen Player Modal */}
+              {openPlayerModal && (
+                <div className="fixed inset-0 z-50 bg-black/70">
+                  <div className="h-full p-3">
+                    <div className="relative h-full flex-col overflow-hidden rounded-2xl border border-emerald-700/30 bg-[#0f1419]">
+                      {/* Modal Header */}
+                      <div className="flex flex-shrink-0 items-center justify-between border-b border-emerald-800/20 px-4 py-3">
+                        <h2 className="text-lg font-semibold text-white">
+                          All Players ({players.length})
+                        </h2>
+                        <button
+                          onClick={() => setOpenPlayerModal(false)}
+                          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-700/50 text-slate-200 hover:bg-slate-600/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                          aria-label="Close player list modal"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Search */}
+                      <div className="flex-shrink-0 border-b border-emerald-800/20 px-4 py-3">
+                        <input
+                          type="text"
+                          placeholder="Search players..."
+                          value={playerSearch}
+                          onChange={(e) => setPlayerSearch(e.target.value)}
+                          className="h-10 w-full rounded-lg border border-slate-600/50 bg-slate-800/70 px-3 text-sm text-white placeholder-slate-300 focus:outline-none focus:border-emerald-500/50"
+                          aria-label="Search players by name"
+                        />
+                      </div>
+
+                      {/* Player List */}
+                      <div className="min-h-0 flex-1 overflow-y-auto">
+                        {(getFilteredPlayers ? getFilteredPlayers(getSortedPlayers()) : getSortedPlayers()).map((p: any) => {
+                          const isPending = !!p.pending;
+                          const isInactive = !p.pending && p.active === false;
+                          const total = parseInt(String(playerTotals[p.id] ?? 0), 10);
+
+                          return (
+                            <div
+                              key={p.id}
+                              className="flex items-center justify-between border-b border-emerald-800/10 px-4 py-2 md:py-3 hover:bg-emerald-950/20"
+                            >
+                              <div className="min-w-0 flex flex-1 items-center gap-2">
+                                <span className="truncate text-sm font-medium text-white">{p.name}</span>
+                                {isPending && (
+                                  <span className="flex-shrink-0 rounded bg-red-500/90 px-1 py-0.5 text-[10px] font-semibold text-white">
+                                    Pending
+                                  </span>
+                                )}
+                                {isInactive && (
+                                  <span className="flex-shrink-0 rounded bg-slate-600/80 px-1 py-0.5 text-[10px] font-medium text-white">
+                                    Exited
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex-shrink-0 text-right">
+                                <div className="font-mono tabular-nums text-base font-semibold text-emerald-300 md:text-lg">
+                                  {total}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                        <div className="pointer-events-none absolute bottom-3 right-3 opacity-70">
+                          <Users className="h-10 w-10 text-emerald-400" />
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
               {/* History button */}
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
@@ -2663,149 +2751,9 @@ return (
               </HistoryDialog>
 
               {/* Summary button */}
-              {renderSummaryDialog("h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
+              {renderSummaryDialog("w-full h-14 rounded-lg text-base font-bold flex items-center justify-center gap-2.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
+
             </div>
-
-
-
-
-
-
-
-
-
-            
-              {/* All Players button */}
-              {/* Zone 3: Players Section (collapsed preview) */}
-                    <div className="flex-1 flex flex-col min-h-0">
-                      <div className="rounded-2xl border border-emerald-700/30 bg-black/40 overflow-hidden flex flex-col">
-                        {/* Header */}
-                        <div className="flex items-center justify-between py-3 px-3 flex-shrink-0">
-                          <h3 className="text-base font-semibold text-white">All Players</h3>
-                          <button
-                            onClick={() => setOpenPlayerModal(true)}
-                            className="text-sm text-emerald-300 hover:text-emerald-200 font-medium flex-shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 px-1"
-                            aria-label={`View all ${players.length} players`}
-                          >
-                            Show all ({players.length})
-                          </button>
-                        </div>
-                        
-                        {/* Preview list - top 5 players only */}
-                        <div className="overflow-y-auto">
-                          {getSortedPlayers().slice(0, 5).map((p: any, index: number) => {
-                            const isPending = !!p.pending;
-                            const isInactive = !p.pending && p.active === false;
-                            const total = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                            
-                            return (
-                              <div 
-                                key={p.id} 
-                                className="flex items-center justify-between px-3 py-2 md:py-3 border-t border-emerald-800/10"
-                              >
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <span className="truncate max-w-[60%] text-sm font-medium text-white">{p.name}</span>
-                                  {isPending && (
-                                    <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/90 text-white font-semibold flex-shrink-0">
-                                      Pending
-                                    </span>
-                                  )}
-                                  {isInactive && (
-                                    <span className="text-[10px] px-1 py-0.5 rounded bg-slate-600/80 text-white font-medium flex-shrink-0">
-                                      Exited
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                  <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
-                                    {total}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Full-screen Player Modal */}
-                    {openPlayerModal && (
-                      <div className="fixed inset-0 bg-black/70 z-50">
-                        <div className="p-3 h-full">
-                          <div className="rounded-2xl bg-[#0f1419] border border-emerald-700/30 h-full flex flex-col overflow-hidden">
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between py-3 px-4 border-b border-emerald-800/20 flex-shrink-0">
-                              <h2 className="text-lg font-semibold text-white">
-                                All Players ({players.length})
-                              </h2>
-                              <button
-                                onClick={() => setOpenPlayerModal(false)}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-200 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-                                aria-label="Close player list modal"
-                              >
-                                ✕
-                              </button>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="flex-1 overflow-y-auto min-h-0">
-                              {/* Search Input */}
-                              <div className="py-3 px-4 border-b border-emerald-800/20">
-                                <input
-                                  type="text"
-                                  placeholder="Search players..."
-                                  value={playerSearch}
-                                  onChange={(e) => setPlayerSearch(e.target.value)}
-                                  className="w-full h-10 rounded-lg bg-slate-800/70 px-3 text-sm text-white placeholder-slate-300 border border-slate-600/50 focus:border-emerald-500/50 focus:outline-none"
-                                  aria-label="Search players by name"
-                                />
-                              </div>
-
-                              {/* Player List */}
-                              <div>
-                                {getFilteredPlayers(getSortedPlayers()).map((p: any, index: number) => {
-                                  const isPending = !!p.pending;
-                                  const isInactive = !p.pending && p.active === false;
-                                  const total = parseInt(String(playerTotals[p.id] ?? 0), 10);
-                                  
-                                  return (
-                                    <div 
-                                      key={p.id} 
-                                      className="flex items-center justify-between py-2 md:py-3 px-4 border-b border-emerald-800/10 hover:bg-emerald-950/20"
-                                    >
-                                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                                        <span className="font-medium text-white text-sm truncate">{p.name}</span>
-                                        {isPending && (
-                                          <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/90 text-white font-semibold flex-shrink-0">
-                                            Pending
-                                          </span>
-                                        )}
-                                        {isInactive && (
-                                          <span className="text-[10px] px-1 py-0.5 rounded bg-slate-600/80 text-white font-medium flex-shrink-0">
-                                            Exited
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="text-right flex-shrink-0">
-                                        <div className="text-base md:text-lg font-semibold text-emerald-300 font-mono tabular-nums">
-                                          {total}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-
-
-
-
-
           </div>
 
           {/* Box 5: Admin (only for admin) */}
