@@ -2607,17 +2607,16 @@ return (
                 className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                 aria-label={`Open all players list (${players?.length ?? 0})`}
               >
-                All Players
-                <span className="ml-1 rounded-md bg-emerald-800/60 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
-                  {players?.length ?? 0}
-                </span>
+
+                <Users className="w-4 h-4" aria-hidden="true" />
+                <span>Players</span> ({players?.length ?? 0})
               </button>
 
               {/* Full-screen Player Modal */}
               {openPlayerModal && (
                 <div className="fixed inset-0 z-50 bg-black/70">
                   <div className="h-full p-3">
-                    <div className="relative h-full flex-col overflow-hidden rounded-2xl border border-emerald-700/30 bg-[#0f1419]">
+                    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-700/30 bg-[#0f1419] pb-12">
                       {/* Modal Header */}
                       <div className="flex flex-shrink-0 items-center justify-between border-b border-emerald-800/20 px-4 py-3">
                         <h2 className="text-lg font-semibold text-white">
@@ -2678,9 +2677,6 @@ return (
                           );
                         })}
                       </div>
-                        <div className="pointer-events-none absolute bottom-3 right-3 opacity-70">
-                          <Users className="h-10 w-10 text-emerald-400" />
-                        </div>
                     </div>
                   </div>
                 </div>
@@ -2751,7 +2747,7 @@ return (
               </HistoryDialog>
 
               {/* Summary button */}
-              {renderSummaryDialog("w-full h-14 rounded-lg text-base font-bold flex items-center justify-center gap-2.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
+              {renderSummaryDialog("col-span-2 h-14 rounded-lg text-base font-bold flex items-center justify-center gap-2.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
 
             </div>
           </div>
