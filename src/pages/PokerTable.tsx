@@ -80,6 +80,7 @@ const DEFAULT_DRINKS = [
   { name: 'Tea', price: 3 },
   { name: 'Iced Coffee', price: 4.5 },
   { name: 'Coca cola', price: 3 },
+  { name: 'Pinche', price: 3.5 },
   { name: 'Hoegaarden', price: 3.5 },
   { name: 'Spa', price: 2.5 },
   { name: 'Duvel', price: 4.5 }
@@ -2023,7 +2024,7 @@ const renderSummaryDialog = (triggerClassName: string) => (
         aria-label="View game summary and profits"
       >
         <BarChart3 className="w-5 h-5" aria-hidden="true" />
-        <span>Summary</span>
+        <span>Game Summary</span>
       </button>
     </DialogTrigger>
     <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md" style={{ width: '400px', maxWidth: '90vw' }}>
@@ -2101,7 +2102,7 @@ return (
     })()}
     
     {showBackground && (
-      <div className="absolute inset-0 bg-black/75 pointer-events-none" style={{ zIndex: 1 }} />
+      <div className="absolute inset-0 bg-black/55 pointer-events-none" style={{ zIndex: 1 }} />
     )}
     
     <div className="relative h-full flex flex-col pt-safe pb-safe px-3 space-y-3" style={{ zIndex: 10 }}>
@@ -2118,18 +2119,12 @@ return (
       <div className="flex-shrink-0">
         <div className="rounded-2xl border border-emerald-500/25 bg-black/40 backdrop-blur-sm p-2">
           <div className="flex items-center justify-between gap-4">
-            {/* Left: Table Name */}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-white truncate">
-                {table.name || normalizedJoinCode}
-              </h1>
-            </div>
             
-            {/* Center: Join Code */}
+            {/* Left: Join Code */}
             <div className="relative flex-shrink-0">
               <button
                 onClick={handleCopyJoinCode}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition text-xs"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-500/95 hover:bg-slate-700 text-white font-bold transition text-xs"
                 title="Copy join code"
                 style={{ minHeight: '32px', minWidth: '80px' }}
               >
@@ -2142,14 +2137,21 @@ return (
                 </div>
               )}
             </div>
+
+            {/* Center: Table Name */}
+            <div className="flex items-center min-w-0">
+              <h1 className="text-2xl font-bold text-white truncate">
+                {table.name || normalizedJoinCode}
+              </h1>
+            </div>
             
             {/* Right: Admin & Game Info */}
             <div className="text-right flex-shrink-0">
-              <div className="text-sm text-slate-300">
-                Admin: <span className="font-bold text-white text-sm">{adminName}</span>
+              <div className="text-xs text-slate-300">
+                Admin: <span className="font-bold text-white text-xs">{adminName}</span>
               </div>
               {currentGame && (
-                <div className="text-emerald-300 font-bold text-sm">
+                <div className="text-emerald-300 font-bold text-xs">
                   Game {currentGame.game_number}
                 </div>
               )}
@@ -2202,7 +2204,7 @@ return (
             return null;
           })()}
           <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
-            <h3 className="text-[10px] font-bold text-white mb-3 uppercase tracking-wide">Actions</h3>
+            <h3 className="text-[10px] font-semibold tracking-[0.16em] text-amber-400/80 mb-2">Actions</h3>
             <div className="space-y-2">
               {/* Row 1: Buy-in Button */}
               <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
@@ -2269,7 +2271,7 @@ return (
                     aria-label="Order drinks"
                   >
                     <Coffee className="w-5 h-5" aria-hidden="true" />
-                    Drinks
+                    Add Drinks
                   </button>
                 </DialogTrigger>
                 <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md max-h-[90vh] flex flex-col">
@@ -2280,17 +2282,16 @@ return (
                   {/* Scrollable content area */}
                   <div className="space-y-3 overflow-y-auto flex-1 min-h-0 pr-2">
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-300 mb-2">Quick Order</h3>
                       <div className="grid grid-cols-4 gap-1.5">
                         {DEFAULT_DRINKS.map(drink => (
                           <Button
                             key={drink.name}
                             onClick={() => handleDrinkOrder(drink.name, drink.price)}
                             disabled={processingDrinkOrder}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white h-14 text-xs font-bold flex-col py-1.5 px-1.5 leading-tight"
+                            className="bg-slate-700/95 hover:bg-slate-500 text-white h-12 text-sm font-semibold flex-col py-1.5 px-1.5 leading-tight"
                           >
                             <span className="text-center mb-0.5">{drink.name}</span>
-                            <span className="text-emerald-200 text-[11px] font-semibold">€{drink.price}</span>
+                            <span className="text-emerald-200 text-[14px] font-semibold">€{drink.price}</span>
                           </Button>
                         ))}
                       </div>
@@ -2305,7 +2306,7 @@ return (
                           value={customDrink}
                           onChange={e => setCustomDrink(e.target.value)}
                           placeholder="Name"
-                          className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-9 flex-grow"
+                          className="bg-gray-800/80 border-green-500/40 placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-9 flex-grow"
                         />
                         <div className="relative flex-shrink-0 w-20">
                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">€</span>
@@ -2327,7 +2328,7 @@ return (
                         <Button
                           onClick={() => handleDrinkOrder(customDrink, Number(customPrice))}
                           disabled={!customDrink || !customPrice || processingDrinkOrder}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-3 flex-shrink-0 text-xs"
+                          className="bg-slate-700/95 hover:bg-slate-500 text-white h-9 px-3 flex-shrink-0 text-xs"
                         >
                           {processingDrinkOrder ? '...' : 'Add'}
                         </Button>
@@ -2337,7 +2338,6 @@ return (
                     {/* Drinks summary table */}
                     {drinkSummaries.length > 0 && (
                       <div className="border-t border-gray-700 pt-3">
-                        <h3 className="text-xs font-semibold text-gray-300 mb-2">Drink Summary</h3>
                         <div className="flex flex-col">
                           {/* Scrollable player rows */}
                           <div className="overflow-y-auto flex-1 max-h-72">
@@ -2369,7 +2369,7 @@ return (
                                               ? order.totalPrice >= 0 ? 'text-yellow-300' : 'text-red-400'
                                               : 'text-slate-300'
                                           }>
-                                            {order.drinkName} x{order.count} (€{order.totalPrice.toFixed(2)})
+                                            {order.drinkName} x{order.count} ({order.totalPrice.toFixed(2)})
                                           </span>
                                         </span>
                                       ))}
@@ -2392,7 +2392,6 @@ return (
                                     €{drinkSummaries.reduce((sum, s) => sum + s.totalAmount, 0).toFixed(2)}
                                   </TableCell>
                                   <TableCell className="text-slate-400 text-[11px] py-2.5 italic leading-tight w-[34%] bg-black">
-                                    All drinks
                                   </TableCell>
                                 </TableRow>
                               </TableBody>
@@ -2420,11 +2419,11 @@ return (
                 <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="w-full h-10 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="Edit your profile name"
                     >
                       <Pencil className="w-4 h-4" aria-hidden="true" />
-                      <span>Edit</span>
+                      <span>Edit Profile</span>
                     </button>
                   </DialogTrigger>
                   <DialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-sm w-80">
@@ -2467,11 +2466,11 @@ return (
                 <Dialog open={openExit} onOpenChange={setOpenExit}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-red-700/90 hover:bg-red-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      className="w-full h-10 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                       aria-label="Exit the table"
                     >
                       <LogOut className="w-4 h-4" aria-hidden="true" />
-                      <span>Exit</span>
+                      <span>Leave Table</span>
                     </button>
                   </DialogTrigger>
                   <DialogContent className="bg-black/90 backdrop-blur-md border-red-500/40 text-white max-w-sm w-80">
@@ -2516,7 +2515,7 @@ return (
       })()}
       {isAdmin && (tableState.pendingRequests.length > 0 || tableState.pendingJoinRequests.length > 0) && (
         <div className="rounded-2xl border border-red-500/40 bg-black/50 backdrop-blur-sm py-3 px-3">
-          <h3 className="text-xs font-bold text-white mb-2 uppercase tracking-wide">Pending Requests</h3>
+          <h3 className="text-[10px] font-semibold tracking-[0.16em] text-amber-400/80 mb-2">Pending Requests</h3>
           
           {/* Buy-in requests */}
           {tableState.pendingRequests.map((r) => (
@@ -2597,14 +2596,14 @@ return (
             return null;
           })()}
           <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
-            <h3 className="text-[10px] font-bold text-white mb-3 uppercase tracking-wide">Overview</h3>
+            <h3 className="text-[10px] font-semibold tracking-[0.16em] text-amber-400/80 mb-2">Overview</h3>
             <div className="grid grid-cols-2 gap-2">
 
               {/* Overview  add the "All Players" button */}
               <button
                 type="button"
                 onClick={() => setOpenPlayerModal(true)}
-                className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                className="w-full h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                 aria-label={`Open all players list (${players?.length ?? 0})`}
               >
 
@@ -2687,11 +2686,11 @@ return (
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
                   <button 
-                    className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                    className="w-full h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                     aria-label="View buy-in history"
                   >
                     <ScrollText className="w-5 h-5" aria-hidden="true" />
-                    <span>History</span>
+                    <span>Buy-ins History</span>
                   </button>
                 </HistoryDialogTrigger>
                 <HistoryDialogContent className="bg-black/90 backdrop-blur-md border-green-500/40 text-white max-w-md" style={{ width: '400px', maxWidth: '90vw' }}>
@@ -2747,7 +2746,7 @@ return (
               </HistoryDialog>
 
               {/* Summary button */}
-              {renderSummaryDialog("col-span-2 h-14 rounded-lg text-base font-bold flex items-center justify-center gap-2.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
+              {renderSummaryDialog("col-span-2 h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2.5 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
 
             </div>
           </div>
@@ -2763,17 +2762,17 @@ return (
                 console.log('[PokerTable] RENDER: Inside Box 4 - Admin section');
                 return null;
               })()}
-              <h3 className="text-[10px] font-bold text-amber-400 mb-3 uppercase tracking-wide">Admin</h3>
+              <h3 className="text-[10px] font-semibold tracking-[0.16em] text-amber-400/80 mb-2">Admin</h3>
               <div className="grid grid-cols-2 gap-2">
                 {/* End Up button */}
                 <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                   <DialogTrigger asChild>
                     <button 
-                      className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="w-full h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="View end game calculations"
                     >
                       <Flag className="w-5 h-5" aria-hidden="true" />
-                      <span>End Up</span>
+                      <span>Game End Up</span>
                     </button>
                   </DialogTrigger>
                   <DialogContent
@@ -2781,12 +2780,11 @@ return (
                     style={{ width: '400px', maxWidth: '90vw', padding: '16px', height: '82vh', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
                   >
                     <DialogHeader>
-                      <DialogTitle className="text-lg font-bold text-white">End Game - Settle Up</DialogTitle>
+                      <DialogTitle className="text-sm font-bold text-white">End-Ups per Game</DialogTitle>
                     </DialogHeader>
                     <div className="flex-1 overflow-y-auto min-h-0">
                       {/* Instructions */}
-                      <div className="text-sm text-gray-300 mb-4">
-                        <p className="mb-2">Review and adjust the end-up values for each player as needed.</p>
+                      <div className="text-xs text-gray-300 mb-4">
                         <p className="font-semibold text-white">Total Profit = (End Up Value - Total Buy-ins) / 7</p>
                       </div>
 
@@ -2795,14 +2793,14 @@ return (
                         <UITable>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="text-slate-200 font-semibold text-sm" style={{ minWidth: 80, padding: '8px' }}>Player</TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 100, padding: '8px' }}>
+                              <TableHead className="text-slate-200 font-semibold text-xs" style={{ minWidth: 80, padding: '8px' }}>Player</TableHead>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 40, padding: '4px' }}>
                                 Total Buy-ins
                               </TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 100, padding: '8px' }}>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 50, padding: '4px' }}>
                                 End Up Value
                               </TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-sm text-right" style={{ minWidth: 100, padding: '8px' }}>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 40, padding: '4px' }}>
                                 Profit
                               </TableHead>
                             </TableRow>
@@ -2815,16 +2813,15 @@ return (
                               
                               return (
                                 <TableRow key={p.id} className="border-b border-gray-700/40">
-                                  <TableCell className="text-white text-sm font-medium py-2">
+                                  <TableCell className="text-white text-xs font-medium py-2">
                                     {p.name}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-sm font-mono text-right py-2">
+                                  <TableCell className="text-slate-300 text-xs font-mono text-right py-2">
                                     {totalBuyIns.toFixed(2)}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-sm font-mono text-right py-2">
+                                  <TableCell className="text-slate-300 text-xs font-mono text-right py-2">
                                     <Input
                                       type="number"
-                                      step="0.01"
                                       min="0"
                                       value={endUpValues[p.id] ?? ''}
                                       onChange={e => handleEndUpChange(p.id, e.target.value)}
@@ -2859,8 +2856,8 @@ return (
                       <Button
                         onClick={handleSaveEndUp}
                         disabled={processingDrinkOrder}
-                        className="bg-red-600 hover:bg-red-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
-                        aria-label="Save end up values and calculate profits"
+                        className="bg-green-600 hover:bg-green-700 text-white font-semibold h-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                        aria-label="Save end up"
                       >
                         {processingDrinkOrder ? 'Saving...' : 'Save End Up'}
                       </Button>
@@ -2872,11 +2869,11 @@ return (
                 <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="w-full h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="Start a new game"
                     >
                       <Play className="w-5 h-5" aria-hidden="true" />
-                      <span>New Game</span>
+                      <span>Start New Game</span>
                     </button>
                   </DialogTrigger>
                   <DialogContent className="bg-black/90 backdrop-blur-md border-purple-500/40 text-white max-w-sm w-80">
@@ -2914,23 +2911,21 @@ return (
             console.log('[PokerTable] RENDER: Box 5 - Player Summary');
             return null;
           })()}
-          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-slate-300 mb-1">Your Buy-ins</div>
+                <div className="text-xs text-amber-400/80 tracking-[0.16em] mb-2">Your Total Buy-ins</div>
+                 
                 <div className="text-2xl md:text-3xl font-extrabold text-emerald-300 font-mono tabular-nums">
                   {parseInt(String(playerTotals[profile?.id] ?? 0), 10)}
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
-                <div className="text-xs text-slate-300 mb-1">
+                <div className="ext-xs text-amber-400/80 tracking-[0.16em] mb-2">
                   Total Pot
                 </div>
                 <div className="text-l md:text-xl font-bold text-emerald-300 font-mono tabular-nums">
                   {Object.values(playerTotals).reduce((sum, v) => sum + parseInt(String(v), 10), 0)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  {players.length} player{players.length !== 1 ? 's' : ''}
                 </div>
               </div>
             </div>
