@@ -2655,7 +2655,7 @@ return (
                               className="flex items-center justify-between border-b border-emerald-800/10 px-4 py-2 md:py-3 hover:bg-emerald-950/20"
                             >
                               <div className="min-w-0 flex flex-1 items-center gap-2">
-                                <span className="truncate text-sm font-medium text-white">{p.name}</span>
+                                <span className="truncate text-lg font-medium text-white">{p.name}</span>
                                 {isPending && (
                                   <span className="flex-shrink-0 rounded bg-red-500/90 px-1 py-0.5 text-[10px] font-semibold text-white">
                                     Pending
@@ -2668,7 +2668,7 @@ return (
                                 )}
                               </div>
                               <div className="flex-shrink-0 text-right">
-                                <div className="font-mono tabular-nums text-base font-semibold text-emerald-300 md:text-lg">
+                                <div className="font-mono tabular-nums text-lg font-semibold text-emerald-300 md:text-lg">
                                   {total}
                                 </div>
                               </div>
@@ -2793,14 +2793,14 @@ return (
                         <UITable>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="text-slate-200 font-semibold text-xs" style={{ minWidth: 80, padding: '8px' }}>Player</TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 40, padding: '4px' }}>
-                                Total Buy-ins
+                              <TableHead className="text-slate-200 font-semibold text-xs text-left" style={{ minWidth: 40, padding: '4px' }}>Player</TableHead>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ minWidth: 40, padding: '4px' }}>
+                                Buy-ins
                               </TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 50, padding: '4px' }}>
-                                End Up Value
+                              <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ minWidth: 100, padding: '8px' }}>
+                                End Ups
                               </TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-right" style={{ minWidth: 40, padding: '4px' }}>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ minWidth: 40, padding: '4px' }}>
                                 Profit
                               </TableHead>
                             </TableRow>
@@ -2813,27 +2813,27 @@ return (
                               
                               return (
                                 <TableRow key={p.id} className="border-b border-gray-700/40">
-                                  <TableCell className="text-white text-xs font-medium py-2">
+                                  <TableCell className="text-white text-xs font-medium text-left py-1">
                                     {p.name}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-xs font-mono text-right py-2">
+                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1">
                                     {totalBuyIns.toFixed(2)}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-xs font-mono text-right py-2">
+                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1">
                                     <Input
                                       type="number"
                                       min="0"
                                       value={endUpValues[p.id] ?? ''}
                                       onChange={e => handleEndUpChange(p.id, e.target.value)}
                                       placeholder="0.00"
-                                      className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 w-full text-right"
+                                      className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 w-full text-center"
                                       aria-label={`Set end up value for ${p.name}`}
                                     />
                                   </TableCell>
-                                  <TableCell className={`text-sm font-mono text-right py-2 ${
+                                  <TableCell className={`text-sm font-mono text-center py-1 ${
                                     profit >= 0 ? 'text-emerald-300' : 'text-red-400'
                                   }`}>
-                                    {(profit >= 0 ? '+' : '') + profit.toFixed(2)}
+                                    { profit.toFixed(2)}
                                   </TableCell>
                                 </TableRow>
                               );
@@ -2893,7 +2893,7 @@ return (
                         </Button>
                         <Button
                           onClick={handleStartNewGame}
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-semibold h-10"
+                          className="bg-green-600 hover:bg-purple-700 text-white font-semibold h-10"
                         >
                           Start New Game
                         </Button>
