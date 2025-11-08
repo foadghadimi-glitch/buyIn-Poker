@@ -2790,19 +2790,19 @@ return (
 
                       {/* End Up Values Table */}
                       <div className="rounded-lg border border-emerald-700/30 bg-black/40 overflow-hidden">
-                        <UITable>
+                        <UITable className="min-w-full table-fixed">
+                          <colgroup>
+                            <col className="w-[40%]" />
+                            <col className="w-[13%]" />
+                            <col className="w-[32%]" />
+                            <col className="w-[15%]" />
+                          </colgroup>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-left" style={{ minWidth: 40, padding: '4px' }}>Player</TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ minWidth: 40, padding: '4px' }}>
-                                Buy-ins
-                              </TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ minWidth: 100, padding: '8px' }}>
-                                End Ups
-                              </TableHead>
-                              <TableHead className="text-slate-200 font-semibold text-xs text-center" style={{ minWidth: 40, padding: '4px' }}>
-                                Profit
-                              </TableHead>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-left px-2 py-1" >Player</TableHead>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-center px-2 py-1" >Buy-ins</TableHead>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-center px-2 py-1" style={{ minWidth: 100, padding: '8px' }}>End Ups</TableHead>
+                              <TableHead className="text-slate-200 font-semibold text-xs text-center px-2 py-1" >Profit</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -2813,13 +2813,13 @@ return (
                               
                               return (
                                 <TableRow key={p.id} className="border-b border-gray-700/40">
-                                  <TableCell className="text-white text-xs font-medium text-left py-1">
+                                  <TableCell className="text-white text-xs font-medium text-left truncate py-1">
                                     {p.name}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1">
+                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1 px-2">
                                     {totalBuyIns.toFixed(2)}
                                   </TableCell>
-                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1">
+                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1 px-2">
                                     <Input
                                       type="number"
                                       min="0"
@@ -2830,7 +2830,7 @@ return (
                                       aria-label={`Set end up value for ${p.name}`}
                                     />
                                   </TableCell>
-                                  <TableCell className={`text-sm font-mono text-center py-1 ${
+                                  <TableCell className={`text-sm font-mono text-center py-1 px-2 ${
                                     profit >= 0 ? 'text-emerald-300' : 'text-red-400'
                                   }`}>
                                     { profit.toFixed(2)}
