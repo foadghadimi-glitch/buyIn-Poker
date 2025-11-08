@@ -2288,7 +2288,7 @@ return (
                             key={drink.name}
                             onClick={() => handleDrinkOrder(drink.name, drink.price)}
                             disabled={processingDrinkOrder}
-                            className="bg-slate-700/95 hover:bg-slate-500 text-white h-12 text-sm font-bold flex-col py-1.5 px-1.5 leading-tight"
+                            className="bg-slate-700/95 hover:bg-slate-500 text-white h-12 text-sm font-semibold flex-col py-1.5 px-1.5 leading-tight"
                           >
                             <span className="text-center mb-0.5">{drink.name}</span>
                             <span className="text-emerald-200 text-[14px] font-semibold">€{drink.price}</span>
