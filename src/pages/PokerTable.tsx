@@ -80,6 +80,7 @@ const DEFAULT_DRINKS = [
   { name: 'Tea', price: 3 },
   { name: 'Iced Coffee', price: 4.5 },
   { name: 'Coca cola', price: 3 },
+  { name: 'Pinche', price: 3.5 },
   { name: 'Hoegaarden', price: 3.5 },
   { name: 'Spa', price: 2.5 },
   { name: 'Duvel', price: 4.5 }
@@ -2287,7 +2288,7 @@ return (
                             key={drink.name}
                             onClick={() => handleDrinkOrder(drink.name, drink.price)}
                             disabled={processingDrinkOrder}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white h-14 text-xs font-bold flex-col py-1.5 px-1.5 leading-tight"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white h-14 text-sm font-bold flex-col py-1.5 px-1.5 leading-tight"
                           >
                             <span className="text-center mb-0.5">{drink.name}</span>
                             <span className="text-emerald-200 text-[11px] font-semibold">€{drink.price}</span>
@@ -2420,7 +2421,7 @@ return (
                 <Dialog open={openEditProfile} onOpenChange={setOpenEditProfile}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="h-10 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 bg-slate-700/90 hover:bg-slate-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="Edit your profile name"
                     >
                       <Pencil className="w-4 h-4" aria-hidden="true" />
@@ -2467,7 +2468,7 @@ return (
                 <Dialog open={openExit} onOpenChange={setOpenExit}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-10 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-red-700/90 hover:bg-red-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      className="h-10 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 bg-red-700/90 hover:bg-red-600 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                       aria-label="Exit the table"
                     >
                       <LogOut className="w-4 h-4" aria-hidden="true" />
@@ -2604,7 +2605,7 @@ return (
               <button
                 type="button"
                 onClick={() => setOpenPlayerModal(true)}
-                className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                className="h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                 aria-label={`Open all players list (${players?.length ?? 0})`}
               >
 
@@ -2687,7 +2688,7 @@ return (
               <HistoryDialog open={openHistory} onOpenChange={setOpenHistory}>
                 <HistoryDialogTrigger asChild>
                   <button 
-                    className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                    className="h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                     aria-label="View buy-in history"
                   >
                     <ScrollText className="w-5 h-5" aria-hidden="true" />
@@ -2747,7 +2748,7 @@ return (
               </HistoryDialog>
 
               {/* Summary button */}
-              {renderSummaryDialog("col-span-2 h-14 rounded-lg text-base font-bold flex items-center justify-center gap-2.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
+              {renderSummaryDialog("col-span-2 h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2.5 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60")}
 
             </div>
           </div>
@@ -2769,7 +2770,7 @@ return (
                 <Dialog open={openEndUp} onOpenChange={setOpenEndUp}>
                   <DialogTrigger asChild>
                     <button 
-                      className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="View end game calculations"
                     >
                       <Flag className="w-5 h-5" aria-hidden="true" />
@@ -2872,7 +2873,7 @@ return (
                 <Dialog open={openStartNewGame} onOpenChange={setOpenStartNewGame}>
                   <DialogTrigger asChild>
                     <button
-                      className="h-14 rounded-xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                      className="h-14 rounded-2xl text-base font-bold flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
                       aria-label="Start a new game"
                     >
                       <Play className="w-5 h-5" aria-hidden="true" />
@@ -2914,7 +2915,7 @@ return (
             console.log('[PokerTable] RENDER: Box 5 - Player Summary');
             return null;
           })()}
-          <div className="rounded-xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
+          <div className="rounded-2xl border border-emerald-700/25 bg-black/50 backdrop-blur-sm p-2">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <div className="text-xs text-slate-300 mb-1">Your Buy-ins</div>
