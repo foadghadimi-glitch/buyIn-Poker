@@ -2210,7 +2210,7 @@ return (
               <Dialog open={openBuyIn} onOpenChange={setOpenBuyIn}>
                 <DialogTrigger asChild>
                   <button 
-                    className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-2.5 bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                    className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-2.5 bg-emerald-800 hover:bg-emerald-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
                     aria-label="Request buy-in from table admin"
                   >
                     <Banknote className="w-5 h-5" aria-hidden="true" />
@@ -2267,7 +2267,7 @@ return (
               <Dialog open={openDrinks} onOpenChange={setOpenDrinks}>
                 <DialogTrigger asChild>
                   <button
-                    className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-2.5 bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                    className="w-full h-14 rounded-2xl text-lg font-bold flex items-center justify-center gap-2.5 bg-blue-900 hover:bg-blue-500 text-white transition shadow-lg active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
                     aria-label="Order drinks"
                   >
                     <Coffee className="w-5 h-5" aria-hidden="true" />
