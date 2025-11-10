@@ -2807,38 +2807,91 @@ return (
                           </TableHeader>
                           <TableBody>
                             {players.map(p => {
-                              const totalBuyIns = playerTotals[p.id] ?? 0;
-                              const endUpValue = endUpValues[p.id] ?? 0;
-                              const profit = calculatePlayerProfit(p.id, endUpValue, totalBuyIns);
-                              
-                              return (
-                                <TableRow key={p.id} className="border-b border-gray-700/40">
-                                  <TableCell className="text-white text-xs font-medium text-left truncate py-1">
-                                    {p.name}
-                                  </TableCell>
-                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1 px-2">
-                                    {totalBuyIns.toFixed(2)}
-                                  </TableCell>
-                                  <TableCell className="text-slate-300 text-xs font-mono text-center py-1 px-2">
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      value={endUpValues[p.id] ?? ''}
-                                      onChange={e => handleEndUpChange(p.id, e.target.value)}
-                                      placeholder="0.00"
-                                      className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-sm h-10 w-full text-center"
-                                      aria-label={`Set end up value for ${p.name}`}
-                                    />
-                                  </TableCell>
-                                  <TableCell className={`text-sm font-mono text-center py-1 px-2 ${
-                                    profit >= 0 ? 'text-emerald-300' : 'text-red-400'
-                                  }`}>
-                                    { profit.toFixed(2)}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
+                                const totalBuyIns = playerTotals[p.id] ?? 0;
+                                const endUpValue = endUpValues[p.id] ?? 0;
+                                const profit = calculatePlayerProfit(p.id, endUpValue, totalBuyIns);
+
+                                return (
+                                  <TableRow key={p.id} className="border-b border-gray-700/40">
+                                    {/* Player */}
+                                    <TableCell
+                                      className="text-white text-xs font-medium text-left px-2 py-1 max-w-[180px] truncate whitespace-nowrap overflow-hidden"
+                                      title={p.name}
+                                    >
+                                      {p.name}
+                                    </TableCell>
+
+                                    {/* Buy-ins */}
+                                    <TableCell className="text-slate-300 text-xs font-mono text-center px-2 py-1">
+                                      {totalBuyIns.toFixed(2)}
+                                    </TableCell>
+
+                                    {/* End Ups input */}
+                                    <TableCell className="text-slate-300 text-xs font-mono text-center px-2 py-1">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        value={endUpValues[p.id] ?? ''}
+                                        onChange={e => handleEndUpChange(p.id, e.target.value)}
+                                        placeholder="0.00"
+                                        className="bg-gray-800/80 border-green-500/40 text-white placeholder-gray-400 focus:ring-green-500/50 focus:border-green-500/60 text-xs h-8 w-full text-center"
+                                        aria-label={`Set end up value for ${p.name}`}
+                                      />
+                                    </TableCell>
+
+                                    {/* Profit */}
+                                    <TableCell
+                                      className={`text-xs font-mono text-center px-2 py-1 ${
+                                        profit >= 0 ? 'text-emerald-300' : 'text-red-400'
+                                      }`}
+                                    >
+                                      {profit.toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+
+                              {/* Totals row */}
+                              {players.length > 0 && (() => {
+                                const totalBuyInsSum = Object.values(playerTotals).reduce(
+                                  (sum, v) => sum + Number(v ?? 0),
+                                  0
+                                );
+
+                                const totalEndUpsSum = Object.values(endUpValues).reduce(
+                                  (sum, v) => sum + Number(v ?? 0),
+                                  0
+                                );
+
+                                const totalProfit = players.reduce((sum, p) => {
+                                  const totalBuyIns = Number(playerTotals[p.id] ?? 0);
+                                  const endUp = Number(endUpValues[p.id] ?? 0);
+                                  // keep using the same helper so logic stays consistent
+                                  return sum + calculatePlayerProfit(p.id, endUp, totalBuyIns);
+                                }, 0);
+
+                                return (
+                                  <TableRow className="border-t border-emerald-700/40 bg-black/60">
+                                    <TableCell className="text-[10px] px-2 py-1 font-semibold text-slate-100">
+                                      Total
+                                    </TableCell>
+                                    <TableCell className="text-[10px] px-2 py-1 text-center font-semibold text-slate-100">
+                                      {totalBuyInsSum.toFixed(2)}
+                                    </TableCell>
+                                    <TableCell className="text-[10px] px-2 py-1 text-center font-semibold text-slate-100">
+                                      {totalEndUpsSum.toFixed(2)}
+                                    </TableCell>
+                                    <TableCell
+                                      className={`text-[10px] px-2 py-1 text-center font-semibold font-mono ${
+                                        totalProfit >= 0 ? 'text-emerald-300' : 'text-red-400'
+                                      }`}
+                                    >
+                                      {totalProfit.toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })()}
+                            </TableBody>
                         </UITable>
                       </div>
                     </div>
